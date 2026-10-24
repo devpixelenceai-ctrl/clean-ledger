@@ -1,6 +1,6 @@
 {
   "name": "clean-ledger-marketplace",
-  "owner": { "name": "YOUR_NAME" },
+  "owner": { "name": "Pixelence AI" },
   "plugins": [
     {
       "name": "clean-ledger",

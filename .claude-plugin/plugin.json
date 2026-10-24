@@ -1,8 +1,8 @@
 {
   "name": "clean-ledger",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Autonomous technical-debt paydown for Claude Code: measures debt with free tools, ranks it by cost, fixes it safely behind tests, and blocks new debt in CI. An independent auditor subagent approves every phase and a guard hook enforces hard safety limits.",
-  "author": { "name": "YOUR_NAME" },
+  "author": { "name": "Pixelence AI" },
   "license": "MIT",
   "keywords": ["technical-debt", "refactoring", "code-quality", "autonomous", "auditor", "hotspots"]
 }

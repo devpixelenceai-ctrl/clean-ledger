@@ -123,8 +123,10 @@ Phase 0 writes `.ledger/config.json`. It is frozen once phase 0 is approved.
 | --- | --- | --- |
 | `branch` | `clean-ledger` | Work branch; commits are blocked anywhere else |
 | `base_branch` | `main` | Branch the work starts from |
-| `src_dirs` | `["src"]` | Folders to analyse and fix |
+| `src_dirs` | `["src"]` | Folders or files to analyse and fix |
 | `test_command` | detected | Command that must pass at every checkpoint |
+| `test_attempts` | `2` | Runs of the test suite per check; a pass after a failure adds a "flaky" warning |
+| `tool_dirs` | `[]` | Folders holding lizard, jscpd and Semgrep when they are not on `PATH` |
 | `protected_paths` | `[]` | Paths that may never be edited |
 | `max_fixes_per_run` | `3` | Fix budget per run |
 | `max_attempts_per_step` | `3` | Rejections before skip or escalate |
@@ -157,7 +159,27 @@ No push, merge, rebase, hard reset, amend, history rewrite, force branch delete 
 - **Tests define safety.** If behaviour isn't covered by tests, the system can't prove it was preserved. Characterization tests help a lot, but areas with heavy I/O, timing or external services are harder to lock down.
 - **Monorepos and exotic stacks** may need `src_dirs`, `test_command` and `protected_paths` adjusted by hand before the run.
 - **Semgrep's default rules are a starting point**, not a full security audit.
-- **Not field-tested yet.** The engine and guard were tested on sample repositories. Run Clean Ledger on a small, non-critical repository first and read its audit trail before trusting it on important code.
+- **Lightly field-tested.** Version 1.0.0's engine and roadmap were run by hand on one real project (Express, JavaScript): all six phases, one Tier 1 fix, with the Auditor rejecting and then approving phase 0. Version 1.1.0 fixes the problems that run exposed and has an automated test suite, but it has not yet been run end to end as an installed plugin, or on other languages. Run it on a small, non-critical repository first and read its audit trail before trusting it on important code.
+- **The Guard reads commands, not intent.** It finds the repository from the edited file, any `cd` or `git -C` in the command, and the working folder, and it catches git subcommands written after global options. A command built in ways it does not parse (for example through a script file or variables) can still get past it.
+
+## Development
+
+The tests use only the Python standard library and create throwaway git repositories:
+
+```bash
+./tests/run_tests.sh
+```
+
+## Changelog
+
+**1.1.0**
+- Guard: finds the ledger repository even when the session starts in a parent folder, and blocks `git -C <dir> push`, `git --no-pager push` and similar forms.
+- verify: re-runs a failing test suite once (`test_attempts`), flags a pass-after-failure as a warning, keeps every run's full log, and names the failing tests.
+- verify: checks protected paths in every phase, matching by path segment (`lib` no longer matches `library.js`).
+- `src_dirs` may contain files; duplicates are matched by exact path (`jscpd --absolute`) and counted per distinct line.
+- `tool_dirs` / `--tool-dir` for user-level tool installs; metrics record tool versions.
+- `ledger.py render-gate` writes a CI gate with pinned tool versions, read-only permissions and no persisted credentials; phase 4 checks the pins.
+- Roadmap: no-lockfile installs, the new commands and checks.
 
 ## License
 
