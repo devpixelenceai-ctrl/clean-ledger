@@ -206,20 +206,44 @@ def read_lizard(path: Path) -> list[dict]:
     return rows
 
 
+def jscpd_path(name: str, src_dirs: list[str]) -> str:
+    """Turn a jscpd file name into a repo-relative path. Absolute names (from
+    `jscpd --absolute`) are made relative to the repo root; a bare name such as
+    `response.js` is resolved against src_dirs only when exactly one file matches."""
+    p = Path(name)
+    if p.is_absolute():
+        try:
+            return norm(p.resolve().relative_to(Path.cwd().resolve()).as_posix())
+        except ValueError:
+            return norm(name)
+    if p.exists():
+        return norm(name)
+    hits = {norm(str(Path(d) / name)) for d in src_dirs if (Path(d) / name).is_file()}
+    return hits.pop() if len(hits) == 1 else norm(name)
+
+
 def read_jscpd(reports: Path) -> dict:
+    """Totals come from jscpd. Per file, count the distinct lines of that file
+    that sit inside any duplicated block (both copies of an in-file clone
+    count; overlapping clones count once)."""
     data = load_json(reports / "jscpd-report.json")
     if not data:
         return {}
     total = data.get("statistics", {}).get("total", {})
-    per_file: dict[str, int] = defaultdict(int)
+    src_dirs = config().get("src_dirs", [])
+    lines: dict[str, set[int]] = defaultdict(set)
     for d in data.get("duplicates", []):
         for side in ("firstFile", "secondFile"):
-            name = d.get(side, {}).get("name")
-            if name:
-                per_file[norm(name)] += int(d.get("lines", 0))
+            f = d.get(side, {})
+            if not f.get("name"):
+                continue
+            start, end = f.get("start"), f.get("end")
+            if not (isinstance(start, int) and isinstance(end, int)):
+                start, end = 1, int(d.get("lines", 0))
+            lines[jscpd_path(f["name"], src_dirs)].update(range(start, end + 1))
     return {"percentage": float(total.get("percentage", 0.0)),
             "duplicated_lines": int(total.get("duplicatedLines", 0)),
-            "per_file": dict(per_file)}
+            "per_file": {k: len(v) for k, v in lines.items()}}
 
 
 def read_semgrep(reports: Path) -> dict:
@@ -245,8 +269,7 @@ def read_churn(path: Path) -> dict[str, dict]:
 
 
 def match_dup(file: str, per_file: dict[str, int]) -> int:
-    return sum(n for name, n in per_file.items()
-               if file == name or file.endswith("/" + name) or name.endswith("/" + file))
+    return per_file.get(norm(file), 0)
 
 
 # ================================================================ metrics
@@ -559,7 +582,7 @@ def source_untouched(c: Checks, cfg: dict):
         c.add("source code unchanged in measurement phases", False, "cannot find merge-base with base branch")
         return
     changed = changed_since(base)
-    hits = [p for p in changed for d in cfg["src_dirs"] if p.startswith(norm(d).rstrip("/") + "/")]
+    hits = [p for p in changed if under(p, cfg["src_dirs"])]
     hits += [p for p in changed if is_test(p)]
     c.add("source code and tests unchanged (setup/measurement only)", not hits, ", ".join(sorted(set(hits)))[:300])
 
@@ -591,7 +614,7 @@ def verify_phase0(c: Checks, cfg: dict):
     c.add("inside a git repository", bool(git("rev-parse", "--git-dir")))
     on_branch(c, cfg)
     c.add("config.json present", CONFIG.exists())
-    missing_src = [d for d in cfg["src_dirs"] if not Path(d).is_dir()]
+    missing_src = [d for d in cfg["src_dirs"] if not Path(d).exists()]
     c.add("src_dirs exist", bool(cfg["src_dirs"]) and not missing_src, "missing: " + ", ".join(missing_src))
     c.add(f"base branch '{cfg['base_branch']}' exists", bool(git("rev-parse", "--verify", "--quiet", cfg["base_branch"])))
     for name in ("ledger.py", "measure.sh"):
@@ -664,8 +687,7 @@ def verify_phase3_plan(c: Checks, cfg: dict, item: str):
     changed = changed_since(start)
     c.add("characterization tests committed", any(is_test(p) for p in changed))
     c.add("target file not changed yet", f not in changed, "refactoring must wait for plan approval")
-    src_changed = [p for p in changed for d in cfg["src_dirs"]
-                   if p.startswith(norm(d).rstrip("/") + "/") and not is_test(p)]
+    src_changed = [p for p in changed if under(p, cfg["src_dirs"]) and not is_test(p)]
     c.add("no source code changed yet", not src_changed, ", ".join(src_changed)[:300])
     pp = plan_path(f)
     text = pp.read_text(encoding="utf-8").lower() if pp.exists() else ""

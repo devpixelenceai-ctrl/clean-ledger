@@ -18,7 +18,7 @@ lizard -x "*/node_modules/*" -x "*/vendor/*" -x "*/dist/*" -x "*/build/*" \
 # 2. Duplication
 rm -f "$OUT/jscpd-report.json"
 # shellcheck disable=SC2086
-jscpd $SRC --reporters json --output "$OUT" --ignore "$IGNORE_GLOBS" --silent >/dev/null 2>&1 \
+jscpd $SRC --absolute --reporters json --output "$OUT" --ignore "$IGNORE_GLOBS" --silent >/dev/null 2>&1 \
   || echo "ledger measure: jscpd failed, duplication not measured"
 
 # 3. Security (optional)
