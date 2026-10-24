@@ -1,0 +1,11 @@
+{
+  "name": "clean-ledger-marketplace",
+  "owner": { "name": "YOUR_NAME" },
+  "plugins": [
+    {
+      "name": "clean-ledger",
+      "source": "./",
+      "description": "Autonomous, audited technical-debt paydown for Claude Code."
+    }
+  ]
+}
