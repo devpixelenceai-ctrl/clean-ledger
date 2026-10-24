@@ -132,6 +132,30 @@ class Judge(unittest.TestCase):
         self.assertTrue(rep.passed, [r for r in rep.rows if r["status"] == "FAIL"])
         self.assertIn("WARN", {r["status"] for r in rep.rows})
 
+    def test_counts_distinct_guard_blocks_in_session_export(self):
+        msg = "Blocked by Clean Ledger guard: pushing is reserved for the human owner. If this is truly needed..."
+        use = {"message": {"content": [{"type": "tool_use", "id": "t1", "input": {"command": "git push"}}]}}
+        res = {"message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": msg}]}}
+        source = {"message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "content":
+                  'print(f"Blocked by Clean Ledger guard: {reason}. If this")'}]}}
+
+        def export(repo, out):
+            sub = out / "session-export" / "abc" / "subagents"
+            sub.mkdir(parents=True)
+            lines = "\n".join(json.dumps(x) for x in (use, res, res, source)) + "\n"
+            (out / "session-export" / "transcript.jsonl").write_text(lines)
+            (sub / "agent-1.jsonl").write_text(json.dumps(source) + "\n")
+        rep = J.judge(evidence(export))
+        self.assertEqual(rep.info["guard_blocks"], 1)
+        row = next(r for r in rep.rows if r["check"].startswith("Guard blocks"))
+        self.assertEqual(row["status"], "WARN")
+        self.assertIn("git push", row["detail"])
+
+    def test_report_hides_details_on_passing_rows(self):
+        out = evidence()
+        text = J.write_report(out, J.judge(out))
+        self.assertNotIn("missing:", text)
+
     def test_missing_transcript_without_session_mode_fails(self):
         self.assertFails(lambda r, o: (o / "transcript.jsonl").unlink(), "successful result")
 
