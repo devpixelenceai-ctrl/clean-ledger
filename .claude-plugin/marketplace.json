@@ -1,6 +1,9 @@
 {
   "name": "clean-ledger-marketplace",
   "owner": { "name": "Pixelence AI" },
+  "metadata": {
+    "description": "Clean Ledger: autonomous, audited technical-debt paydown for Claude Code."
+  },
   "plugins": [
     {
       "name": "clean-ledger",

@@ -1,0 +1,5 @@
+.git
+e2e/out
+**/__pycache__
+**/*.pyc
+.DS_Store

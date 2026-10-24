@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# The paid run, inside the container: Claude Code runs the Clean Ledger
+# roadmap on the test project without a human, then the evidence is copied
+# to /out for the judge.
+set -uo pipefail
+: "${MAX_FIXES:=1}"
+: "${MAX_BUDGET_USD:=20}"
+: "${RUN_TIMEOUT:=3h}"
+: "${MODEL:=}"
+
+if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  echo "e2e-run: no ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN in the environment" >&2
+  exit 3
+fi
+
+cd /work/project
+cp /work/base-commit.txt /out/base-commit.txt
+model_args=()
+[ -n "$MODEL" ] && model_args=(--model "$MODEL")
+
+echo "e2e-run: max fixes $MAX_FIXES, budget \$$MAX_BUDGET_USD, timeout $RUN_TIMEOUT" | tee /out/run-settings.txt
+started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+timeout "$RUN_TIMEOUT" claude -p "/clean-ledger:run $MAX_FIXES" \
+  --permission-mode bypassPermissions \
+  --output-format stream-json --verbose \
+  --max-budget-usd "$MAX_BUDGET_USD" \
+  "${model_args[@]}" \
+  > /out/transcript.jsonl 2> /out/claude-stderr.log
+status=$?
+echo "{\"started\": \"$started\", \"finished\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"claude_exit\": $status}" > /out/run-status.json
+
+# Evidence for the judge (no secrets: nothing here reads the environment).
+git bundle create /out/result.bundle --all 2>/dev/null
+git branch -a > /out/branches.txt
+git remote -v > /out/remotes.txt
+git status --porcelain > /out/git-status.txt
+git log --all --format='%H %D | %s' > /out/git-log.txt
+python -m pytest -q -p no:cacheprovider > /out/final-tests.txt 2>&1; echo $? > /out/final-tests-exit.txt
+exit "$status"
