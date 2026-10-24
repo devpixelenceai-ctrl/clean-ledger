@@ -30,7 +30,7 @@ A *step* is a phase (0, 1, 2, 4, 5), the overall phase 3 sign-off, or one of the
 
 1. **Read** this roadmap's section for the step.
 2. **Do** the tasks. Commit the work with a conventional commit message.
-3. **Self-check:** run the step's `verify` command (see the table). Fix and re-run until it passes. If it still fails after 5 tries, escalate (section 6).
+3. **Self-check:** run the step's `verify` command (see the table). Fix and re-run until it passes. If it still fails after 5 tries, escalate (section 6). `verify` runs the test suite up to `test_attempts` times (default 2): a pass after a failure still passes but adds a WARN "test suite is stable" naming the first failure, and every run's full output is in `.ledger/verify/tests-attempt<N>.log`. Mention any such WARN in the audit brief.
 4. **Audit:** delegate to the `ledger-auditor` subagent with exactly this brief:
    `Audit phase <N> [item <file> step <plan|final>], attempt <k>. Builder summary: <3-6 lines: what was done, where, anything unusual>.`
 5. **Verdict:** the Auditor runs the objective checks, reviews the work, records its verdict with `ledger.py record` and returns `APPROVED` or `REJECTED` with required fixes.
@@ -71,16 +71,16 @@ Run `python3 .ledger/ledger.py status` at any time to see where the run is. If a
 **Tasks.**
 1. Confirm git, Python 3 and Node.js are available. Confirm the working tree is clean. If it is not, escalate.
 2. Detect the default branch. Create and switch to the `clean-ledger` branch from it.
-3. Install missing analysis tools: `pip install lizard`, `npm install -g jscpd`, and optionally `pip install semgrep` (skip Semgrep on Windows without WSL). Prefer user-level installs.
-4. Detect languages, source folders, test framework and the exact test command. Run `python3 <this skill's scripts>/ledger.py init --src <dirs> --test-command "<cmd>" --base-branch <default branch>`, adding `--protected <paths>` for generated, vendored or migration folders.
-5. Install project dependencies with the project's own lockfile command (`npm ci`, `pip install -r requirements.txt`, `poetry install`, `mvn -q test-compile`, etc.).
+3. Install missing analysis tools: `pip install lizard`, `npm install -g jscpd`, and optionally `pip install semgrep` (skip Semgrep on Windows without WSL). Prefer user-level installs (for example a virtualenv and `npm install --prefix`). If a tool ends up in a folder that is not on `PATH`, pass that folder to `init` with `--tool-dir`.
+4. Detect languages, source folders and files, test framework and the exact test command. Run `python3 <this skill's scripts>/ledger.py init --src <dirs or files> --test-command "<cmd>" --base-branch <default branch>`, adding `--protected <paths>` for generated, vendored or migration folders, entry points that must not change, existing CI workflows and other sensitive files, and `--tool-dir <dirs>` if needed. `--src` accepts files as well as folders (for example a root `index.js`).
+5. Install project dependencies with the project's own lockfile command (`npm ci`, `pip install -r requirements.txt`, `poetry install`, `mvn -q test-compile`, etc.). If the project has no lockfile, use its plain install command (for example `npm install`) and say so in `BASELINE.md`.
 6. Run the test suite. If it does not pass, escalate. Clean Ledger never refactors on top of a failing suite.
 7. Explore the code read-only. Write `CLAUDE.md` with these headings: `## Overview`, `## Architecture`, `## Commands` (exact install, build, lint, test commands), `## Conventions`, `## Protected` (paths never to edit, matching `protected_paths`), `## Debt rules` (the golden rules in section 2).
 8. Run `bash .ledger/measure.sh`. Copy `.ledger/metrics.json` to `.ledger/baseline.json`.
 9. Write `BASELINE.md`: date, commit, test results, coverage if available, the metrics, and outdated dependencies from the package manager.
 10. Commit: `chore(ledger): phase 0 setup`.
 
-**Objective criteria (verify --phase 0).** On the `clean-ledger` branch; config valid and source folders exist; base branch exists; `.ledger/ledger.py` and `measure.sh` present; lizard and jscpd installed; baseline valid; `CLAUDE.md` has Commands, Protected and Debt rules sections; `BASELINE.md` exists; `.gitignore` excludes `.ledger/reports/`; no source or test files changed; the test suite passes; the working tree is clean.
+**Objective criteria (verify --phase 0).** On the `clean-ledger` branch; config valid and source folders exist; base branch exists; `.ledger/ledger.py` and `measure.sh` present; lizard and jscpd installed; baseline valid; `CLAUDE.md` has Commands, Protected and Debt rules sections; `BASELINE.md` exists; `.gitignore` excludes `.ledger/reports/`; no source or test files changed; no protected paths changed; the test suite passes; the working tree is clean.
 
 **Reviewed criteria (Auditor judges).**
 - The commands in `CLAUDE.md` are real: they match the project's manifests and CI, and the test command equals `test_command` in the config.
@@ -100,14 +100,14 @@ Run `python3 .ledger/ledger.py status` at any time to see where the run is. If a
 4. List outdated dependencies with the package manager. Note any that are a major version behind or have advisories.
 5. Write `DEBT_REGISTER.md` with these sections, in this order:
    - `## Totals` (baseline and now: complex functions, duplication %, security findings, coverage, outdated majors)
-   - `## Hotspots` (the hotspot table, plus a one-line plain-English problem note per Tier 1 row)
+   - `## Hotspots` (the hotspot table, plus a one-line plain-English problem note per Tier 1 row; "Dup lines" is the number of the file's lines inside a duplicated block, so both copies of an in-file clone count, while the repo-wide duplication figure comes from jscpd)
    - `## Dependencies`
    - `## Team input` (leave the heading and the line "To be filled in by the Owner's team.")
    - `## Done` (a table: Date, File, What changed, Before → after)
    - `## Observations` (the 5 worst hotspots with one sentence each; high-severity security items; data problems you noticed)
 6. Commit: `chore(ledger): phase 1 debt register`.
 
-**Objective criteria (verify --phase 1).** Measurement runs; the complexity report has functions; the churn report exists; the register has all six sections and the hotspot table; the top hotspots are named in it; no source or test files changed; the working tree is clean.
+**Objective criteria (verify --phase 1).** Measurement runs; the complexity report has functions; the churn report exists; the register has all six sections and the hotspot table; the top hotspots are named in it; no source or test files changed; no protected paths changed; the working tree is clean.
 
 **Reviewed criteria.**
 - The problem notes describe what is actually wrong in each file. Spot-check at least 2 Tier 1 files by reading them.
@@ -126,7 +126,7 @@ Run `python3 .ledger/ledger.py status` at any time to see where the run is. If a
 4. If the queue is empty, write "No Tier 1 items" and the reason in the register; phase 3 will then be signed off with no items.
 5. Commit: `chore(ledger): phase 2 prioritise`.
 
-**Objective criteria (verify --phase 2).** `queue.json` exists; every queued file exists and is named in the register; the register contains monthly cost estimates (or explains an empty queue); no source or test files changed; the working tree is clean.
+**Objective criteria (verify --phase 2).** `queue.json` exists; every queued file exists and is named in the register; the register contains monthly cost estimates (or explains an empty queue); no source or test files changed; no protected paths changed; the working tree is clean.
 
 **Reviewed criteria.**
 - The order makes sense: security first, then the highest cost.
@@ -175,7 +175,7 @@ Work through `queue.json` in order, skipping items marked `done` or `skipped`. F
 
 **3i. Phase 3 sign-off.** When the budget is used up or the queue is finished, run the protocol for phase 3 with no item.
 
-**Objective criteria, sign-off (verify --phase 3).** No item in progress; every done item approved; every skipped item has a reason and is fully reverted; the fix budget was respected or the queue finished; the gate passes; tests pass; tree clean.
+**Objective criteria, sign-off (verify --phase 3).** No item in progress; every done item approved; every skipped item has a reason and is fully reverted; the fix budget was respected or the queue finished; the gate passes; no protected paths changed; tests pass; tree clean.
 
 **Reviewed criteria, sign-off.** `BLOCKED.md` lists any skipped items with honest reasons; nothing unfinished is hidden.
 
@@ -184,13 +184,13 @@ Work through `queue.json` in order, skipping items marked `done` or `skipped`. F
 **Goal.** Make debt that has been paid stay paid, using free CI.
 
 **Tasks.**
-1. Detect the CI system. For GitHub, copy this skill's `assets/ledger-gate.yml` to `.github/workflows/ledger-gate.yml`. For another CI system, write the equivalent at the path in `ci_file` (update the config only during phase 0; otherwise use the default path).
-2. If Semgrep is not installed locally, remove the Semgrep install line from the workflow so CI measures the same things as the baseline.
+1. Detect the CI system. For GitHub, run `python3 .ledger/ledger.py render-gate --template <this skill>/assets/ledger-gate.yml`. It writes `ci_file` with read-only permissions, no persisted checkout credentials, and lizard, jscpd and Semgrep pinned to the versions installed locally (the versions recorded in the baseline). For another CI system, write the equivalent at the path in `ci_file` with the same pins (update the config only during phase 0; otherwise use the default path).
+2. `render-gate` leaves out the Semgrep install when Semgrep is not installed locally, so CI measures the same things as the baseline. Do not remove the pins.
 3. If the repository has no Dependabot or Renovate config, add `.github/dependabot.yml` for the project's package ecosystems with a weekly schedule and a limit of 5 open pull requests.
 4. Add a short `## Quality gate` section to `CLAUDE.md` explaining the gate and how to raise the baseline after a reviewed paydown.
 5. Commit: `ci(ledger): add technical debt gate`.
 
-**Objective criteria (verify --phase 4).** The CI workflow exists and runs `ledger.py gate`; measurement runs; the gate passes locally; tests pass; tree clean.
+**Objective criteria (verify --phase 4).** The CI workflow exists and runs `ledger.py gate`; it pins the tool versions recorded in `.ledger/baseline.json`; measurement runs; the gate passes locally; no protected paths changed; tests pass; tree clean.
 
 **Reviewed criteria.**
 - The workflow is valid for the detected CI system, checks out full history, and installs the same tools used for the baseline.
@@ -208,7 +208,7 @@ Work through `queue.json` in order, skipping items marked `done` or `skipped`. F
 4. If any item was skipped or any phase escalated, make sure `BLOCKED.md` is accurate.
 5. Commit: `docs(ledger): phase 5 report`.
 
-**Objective criteria (verify --phase 5).** `PROGRESS.md` and `PR_DESCRIPTION.md` exist; phases 0–4 are approved; every done item is approved and none is in progress; tests pass; tree clean.
+**Objective criteria (verify --phase 5).** `PROGRESS.md` and `PR_DESCRIPTION.md` exist; phases 0–4 are approved; every done item is approved and none is in progress; no protected paths changed; tests pass; tree clean.
 
 **Reviewed criteria.**
 - Every number in `PROGRESS.md` matches the metrics and the register.
