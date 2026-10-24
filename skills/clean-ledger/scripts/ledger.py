@@ -68,8 +68,11 @@ DEFAULT_CONFIG = {
     "tier1_size": 10,
     "ccn_limit": DEFAULT_CCN_LIMIT,
     "ci_file": ".github/workflows/ledger-gate.yml",
+    "tool_dirs": [],
     "autopilot": True,
 }
+TOOLS = ("lizard", "jscpd", "semgrep")
+VERSION = re.compile(r"\d+\.\d+\.\d+")
 
 
 # ================================================================ helpers
@@ -80,9 +83,10 @@ def norm(path: str) -> str:
     return p
 
 
-def sh(cmd: list[str] | str, timeout: int | None = None, check: bool = False) -> subprocess.CompletedProcess:
+def sh(cmd: list[str] | str, timeout: int | None = None, check: bool = False,
+       env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                          shell=isinstance(cmd, str), check=check)
+                          shell=isinstance(cmd, str), check=check, env=env)
 
 
 def git(*args: str) -> str:
@@ -110,6 +114,33 @@ def config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
     cfg.update(load_json(CONFIG, {}) or {})
     return cfg
+
+
+def tool_path() -> str:
+    """PATH with the configured `tool_dirs` (user-level tool installs) first."""
+    dirs = [os.path.expanduser(d) for d in config().get("tool_dirs", [])]
+    return os.pathsep.join([*dirs, os.environ.get("PATH", "")])
+
+
+def tool_env() -> dict:
+    return {**os.environ, "PATH": tool_path()}
+
+
+def tool_versions() -> dict:
+    """Installed version of each analysis tool, or None if it is not found."""
+    out = {}
+    for tool in TOOLS:
+        exe = shutil.which(tool, path=tool_path())
+        version = None
+        if exe:
+            try:
+                r = sh([exe, "--version"], timeout=120)
+                m = VERSION.search(r.stdout + r.stderr)
+                version = m.group(0) if m else None
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        out[tool] = version
+    return out
 
 
 def slug(path: str) -> str:
@@ -149,6 +180,8 @@ def cmd_init(args) -> int:
         cfg["base_branch"] = args.base_branch
     if args.protected:
         cfg["protected_paths"] = args.protected
+    if args.tool_dir:
+        cfg["tool_dirs"] = args.tool_dir
     save_json(CONFIG, cfg)
     gi = Path(".gitignore")
     lines = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
@@ -288,6 +321,7 @@ def compute_metrics(reports: Path, ccn_limit: int) -> dict:
         "duplication_pct": round(dup["percentage"], 2) if dup else None,
         "duplicated_lines": dup.get("duplicated_lines") if dup else None,
         "security": sem["totals"] if sem["present"] else None,
+        "tools": tool_versions(),
     }
 
 
@@ -420,7 +454,7 @@ def cmd_gate(args) -> int:
 def run_measure() -> tuple[bool, str]:
     if not (LEDGER / "measure.sh").exists():
         return False, "missing .ledger/measure.sh"
-    r = sh(["bash", str(LEDGER / "measure.sh")], timeout=3600)
+    r = sh(["bash", str(LEDGER / "measure.sh")], timeout=3600, env=tool_env())
     return r.returncode == 0, (r.stdout + r.stderr)[-1500:]
 
 
@@ -542,7 +576,7 @@ def tests_pass(c: Checks, cfg: dict):
     for n in range(1, attempts + 1):
         log = VERIFY_DIR / f"tests-attempt{n}.log"
         try:
-            r = sh(cmd, timeout=int(cfg.get("test_timeout_seconds", 1800)))
+            r = sh(cmd, timeout=int(cfg.get("test_timeout_seconds", 1800)), env=tool_env())
             out, ok = r.stdout + r.stderr, r.returncode == 0
         except subprocess.TimeoutExpired as e:
             out, ok = f"{e.stdout or ''}{e.stderr or ''}\n[timed out]", False
@@ -620,8 +654,8 @@ def verify_phase0(c: Checks, cfg: dict):
     for name in ("ledger.py", "measure.sh"):
         c.add(f".ledger/{name} present", (LEDGER / name).exists())
     for tool in ("lizard", "jscpd"):
-        c.add(f"{tool} installed", shutil.which(tool) is not None)
-    c.add("semgrep installed (optional)", shutil.which("semgrep") is not None, warn_only=True)
+        c.add(f"{tool} installed", shutil.which(tool, path=tool_path()) is not None)
+    c.add("semgrep installed (optional)", shutil.which("semgrep", path=tool_path()) is not None, warn_only=True)
     base = load_json(LEDGER / "baseline.json")
     c.add(".ledger/baseline.json valid", isinstance(base, dict) and "complex_functions" in base)
     cm = Path("CLAUDE.md")
@@ -781,7 +815,16 @@ def verify_phase4(c: Checks, cfg: dict):
     on_branch(c, cfg)
     ci = Path(cfg["ci_file"])
     c.add(f"CI workflow {ci} exists", ci.exists())
-    c.add("CI workflow runs the ledger gate", ci.exists() and "ledger.py gate" in ci.read_text(encoding="utf-8"))
+    text = ci.read_text(encoding="utf-8") if ci.exists() else ""
+    c.add("CI workflow runs the ledger gate", "ledger.py gate" in text)
+    pinned = (load_json(LEDGER / "baseline.json", {}) or {}).get("tools") or {}
+    if pinned:
+        wanted = [pin_text(tool, v) for tool, v in pinned.items() if v and pin_text(tool, v)]
+        missing = [w for w in wanted if w not in text]
+        c.add("CI workflow pins the baseline tool versions", not missing, "missing: " + ", ".join(missing))
+    else:
+        c.add("CI workflow pins the baseline tool versions", False,
+              "baseline.json has no tool versions; cannot check", warn_only=True)
     ok, out = run_measure()
     c.add("measurement runs", ok, "" if ok else out)
     fails, _ = gate_compare(load_json(LEDGER / "baseline.json", {}), load_json(LEDGER / "metrics.json", {}), 0.1)
@@ -789,6 +832,36 @@ def verify_phase4(c: Checks, cfg: dict):
     protected_untouched(c, cfg)
     tests_pass(c, cfg)
     tree_clean(c)
+
+
+def pin_text(tool: str, version: str) -> str:
+    """How the gate workflow installs `tool` at `version`."""
+    return {"lizard": f"lizard=={version}", "semgrep": f"semgrep=={version}",
+            "jscpd": f"jscpd@{version}"}.get(tool, "")
+
+
+def cmd_render_gate(args) -> int:
+    """Write the CI gate workflow from the template, pinning the locally
+    installed tool versions; the Semgrep step is dropped if it is not installed."""
+    cfg = config()
+    versions = tool_versions()
+    missing = [t for t in ("lizard", "jscpd") if not versions[t]]
+    if missing:
+        print("ledger render-gate: not installed (or no version found): " + ", ".join(missing), file=sys.stderr)
+        return 2
+    lines = []
+    for line in Path(args.template).read_text(encoding="utf-8").splitlines():
+        if "{{SEMGREP_VERSION}}" in line and not versions["semgrep"]:
+            continue
+        for tool in TOOLS:
+            if versions[tool]:
+                line = line.replace("{{" + tool.upper() + "_VERSION}}", versions[tool])
+        lines.append(line)
+    out = Path(cfg["ci_file"])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"ledger: wrote {out} (" + ", ".join(f"{t} {v}" for t, v in versions.items() if v) + ")")
+    return 0
 
 
 def verify_phase5(c: Checks, cfg: dict):
@@ -926,7 +999,12 @@ def main() -> int:
     s.add_argument("--test-command")
     s.add_argument("--base-branch")
     s.add_argument("--protected", nargs="+")
+    s.add_argument("--tool-dir", nargs="+", help="folders holding lizard/jscpd/semgrep if not on PATH")
     s.set_defaults(func=cmd_init)
+
+    s = sub.add_parser("render-gate")
+    s.add_argument("--template", required=True)
+    s.set_defaults(func=cmd_render_gate)
 
     s = sub.add_parser("churn")
     s.add_argument("--since", default="12 months ago")

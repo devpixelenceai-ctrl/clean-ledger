@@ -5,6 +5,9 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 SRC="${LEDGER_SRC:-$(python3 -c 'import json;print(" ".join(json.load(open(".ledger/config.json")).get("src_dirs",["src"])))' 2>/dev/null || echo src)}"
+# User-level tool installs (tool_dirs in the config) come first on PATH.
+TOOL_DIRS="$(python3 -c 'import json,os;print(os.pathsep.join(os.path.expanduser(d) for d in json.load(open(".ledger/config.json")).get("tool_dirs",[])))' 2>/dev/null || true)"
+if [ -n "$TOOL_DIRS" ]; then export PATH="$TOOL_DIRS:$PATH"; fi
 OUT=.ledger/reports
 mkdir -p "$OUT"
 IGNORE_GLOBS="**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/test/**,**/tests/**,**/__tests__/**,**/*.min.js"
