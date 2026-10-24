@@ -80,16 +80,25 @@ def check_secrets(out: Path, rep: Report):
 
 
 def check_run(out: Path, rep: Report):
-    status = json.loads(read(out / "run-status.json") or "{}")
-    rep.add("Claude Code run finished (exit 0)", status.get("claude_exit") == 0,
-            f"exit {status.get('claude_exit')}")
-    result = transcript_result(out)
-    rep.info["cost_usd"] = result.get("total_cost_usd")
-    rep.info["turns"] = result.get("num_turns")
-    rep.info["result_subtype"] = result.get("subtype")
-    rep.add("transcript ends with a successful result", bool(result) and not result.get("is_error")
-            and result.get("subtype") == "success", f"subtype {result.get('subtype')}")
-    blocks = read(out / "transcript.jsonl").count(GUARD_BLOCK)
+    session_mode = (out / "session-mode.txt").exists()
+    rep.info["mode"] = "desktop session" if session_mode else "headless"
+    if session_mode:
+        # A desktop-app session has no exit code or stream-json transcript file;
+        # its transcript is exported separately for the reviewer.
+        rep.add("run exit status and transcript result (desktop session: reviewed separately)",
+                False, "not available in session mode", warn_only=True)
+    else:
+        status = json.loads(read(out / "run-status.json") or "{}")
+        rep.add("Claude Code run finished (exit 0)", status.get("claude_exit") == 0,
+                f"exit {status.get('claude_exit')}")
+        result = transcript_result(out)
+        rep.info["cost_usd"] = result.get("total_cost_usd")
+        rep.info["turns"] = result.get("num_turns")
+        rep.info["result_subtype"] = result.get("subtype")
+        rep.add("transcript ends with a successful result", bool(result) and not result.get("is_error")
+                and result.get("subtype") == "success", f"subtype {result.get('subtype')}")
+    transcript = read(out / "transcript.jsonl") + read(out / "transcript.md")
+    blocks = transcript.count(GUARD_BLOCK)
     rep.info["guard_blocks"] = blocks
     rep.add("Guard blocks during the run (review each one)", blocks == 0, f"{blocks} block(s)", warn_only=True)
     rep.add("project has no git remote (nothing could be pushed)", read(out / "remotes.txt").strip() == "",

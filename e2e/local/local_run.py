@@ -171,6 +171,8 @@ def main() -> int:
     if args.collect:
         run_dir = Path(args.collect)
         project, out = run_dir / "project", run_dir / "out"
+        if run_dir.name.endswith("-session"):
+            (out / "session-mode.txt").write_text("desktop session\n")
         collect(project, out, (out / "base-commit.txt").read_text().strip())
         return subprocess.call([sys.executable, str(PLUGIN / "e2e" / "judge.py"), str(out)])
     if not shutil.which("claude"):

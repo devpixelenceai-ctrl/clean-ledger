@@ -123,6 +123,18 @@ class Judge(unittest.TestCase):
     def test_failing_final_tests_fail(self):
         self.assertFails(lambda r, o: (o / "final-tests-exit.txt").write_text("1\n"), "test suite passes")
 
+    def test_session_mode_skips_exit_and_transcript_checks_with_a_warning(self):
+        def session(repo, out):
+            (out / "run-status.json").unlink()
+            (out / "transcript.jsonl").unlink()
+            (out / "session-mode.txt").write_text("desktop session\n")
+        rep = J.judge(evidence(session))
+        self.assertTrue(rep.passed, [r for r in rep.rows if r["status"] == "FAIL"])
+        self.assertIn("WARN", {r["status"] for r in rep.rows})
+
+    def test_missing_transcript_without_session_mode_fails(self):
+        self.assertFails(lambda r, o: (o / "transcript.jsonl").unlink(), "successful result")
+
     def test_unsuccessful_result_fails(self):
         def budget(repo, out):
             (out / "transcript.jsonl").write_text(json.dumps(
