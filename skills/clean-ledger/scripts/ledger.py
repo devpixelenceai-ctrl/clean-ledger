@@ -59,6 +59,7 @@ DEFAULT_CONFIG = {
     "src_dirs": ["src"],
     "test_command": "",
     "test_timeout_seconds": 1800,
+    "test_attempts": 2,
     "protected_paths": [],
     "hourly_cost": None,
     "currency": "USD",
@@ -478,16 +479,51 @@ def on_branch(c: Checks, cfg: dict):
     c.add(f"on work branch '{cfg['branch']}'", b == cfg["branch"], f"current: {b}")
 
 
+# Lines that name failing tests: mocha/jest "1) name", pytest "FAILED ...",
+# TAP "not ok", and common assertion / error wording.
+FAILURE_LINE = re.compile(r"^\s*\d+\)\s|fail|error|✗|✖|not ok|expected|assert", re.I)
+
+
+def failure_summary(output: str, limit: int = 15) -> str:
+    """The lines most likely to name the failing tests, plus the last lines."""
+    lines = [l.rstrip() for l in output.splitlines() if l.strip()]
+    hits = [l for l in lines if FAILURE_LINE.search(l)][:limit]
+    tail = lines[-5:]
+    return "\n      ".join([*hits, "...", *tail] if hits else tail)[:3000]
+
+
 def tests_pass(c: Checks, cfg: dict):
+    """Run the test suite up to `test_attempts` times. A pass after a failure
+    passes but adds a visible WARN; every run's full output is kept in
+    .ledger/verify/tests-attempt<N>.log."""
     cmd = cfg.get("test_command")
     if not cmd:
         c.add("test command configured", False, "set test_command in .ledger/config.json")
         return
-    try:
-        r = sh(cmd, timeout=int(cfg.get("test_timeout_seconds", 1800)))
-        c.add("test suite passes", r.returncode == 0, (r.stdout + r.stderr)[-600:] if r.returncode else "")
-    except subprocess.TimeoutExpired:
-        c.add("test suite passes", False, "timed out")
+    attempts = max(1, int(cfg.get("test_attempts", 2)))
+    VERIFY_DIR.mkdir(parents=True, exist_ok=True)
+    for old in VERIFY_DIR.glob("tests-attempt*.log"):
+        old.unlink()
+    first_failure = ""
+    for n in range(1, attempts + 1):
+        log = VERIFY_DIR / f"tests-attempt{n}.log"
+        try:
+            r = sh(cmd, timeout=int(cfg.get("test_timeout_seconds", 1800)))
+            out, ok = r.stdout + r.stderr, r.returncode == 0
+        except subprocess.TimeoutExpired as e:
+            out, ok = f"{e.stdout or ''}{e.stderr or ''}\n[timed out]", False
+        log.write_text(out, encoding="utf-8", errors="replace")
+        if ok:
+            c.add("test suite passes", True)
+            if n > 1:
+                c.add("test suite is stable", False,
+                      f"failed on attempt 1, passed on attempt {n} (flaky); see {VERIFY_DIR}/tests-attempt1.log\n"
+                      f"      {first_failure}", warn_only=True)
+            return
+        if n == 1:
+            first_failure = failure_summary(out)
+    c.add("test suite passes", False,
+          f"failed {attempts} time(s); full output in {VERIFY_DIR}/tests-attempt*.log\n      {first_failure}")
 
 
 def register_ok(c: Checks):
