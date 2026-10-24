@@ -132,17 +132,57 @@ def collect(project: Path, out: Path, base: str):
     (out / "final-tests-exit.txt").write_text(f"{t.returncode}\n")
 
 
+def prepare_session(run_dir: Path) -> Path:
+    """Set up a project for a Claude Code *desktop* session to run Clean Ledger in:
+    plugin enabled for this folder only (local scope), sandbox and permission
+    settings in .claude/settings.local.json, and .claude/ kept out of git."""
+    project = prepare(run_dir)
+    with open(project / ".git" / "info" / "exclude", "a") as fh:
+        fh.write("\n.claude/\n")
+    for cmd in (["claude", "plugin", "marketplace", "add", str(PLUGIN), "--scope", "local"],
+                ["claude", "plugin", "install", "clean-ledger@clean-ledger-marketplace", "--scope", "local"]):
+        must(cmd, project)
+    local = project / ".claude" / "settings.local.json"
+    cfg = json.loads(local.read_text()) if local.exists() else {}
+    ours = json.loads(SETTINGS.read_text())
+    cfg["permissions"] = ours["permissions"]
+    cfg["sandbox"] = ours["sandbox"]
+    env = child_env(project)
+    cfg["env"] = {k: env[k] for k in ("PATH", "SEMGREP_SETTINGS_FILE", "SEMGREP_LOG_FILE",
+                                      "SEMGREP_VERSION_CACHE_PATH", "PIP_CACHE_DIR")}
+    local.write_text(json.dumps(cfg, indent=2) + "\n")
+    if must(["git", "status", "--porcelain"], project):
+        sys.exit("local_run: project not clean after session setup")
+    return project
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--prepare-session", action="store_true",
+                    help="prepare a folder for a desktop-app session to run in, then stop")
+    ap.add_argument("--collect", metavar="RUN_DIR", help="collect evidence from a finished session run and judge it")
     ap.add_argument("--max-fixes", type=int, default=1)
     ap.add_argument("--budget", type=float, default=20.0)
     ap.add_argument("--timeout-min", type=int, default=180)
     ap.add_argument("--runs-dir", default=str(PLUGIN.parent / "clean-ledger-e2e-runs"))
     args = ap.parse_args()
 
+    if args.collect:
+        run_dir = Path(args.collect)
+        project, out = run_dir / "project", run_dir / "out"
+        collect(project, out, (out / "base-commit.txt").read_text().strip())
+        return subprocess.call([sys.executable, str(PLUGIN / "e2e" / "judge.py"), str(out)])
     if not shutil.which("claude"):
         sys.exit("local_run: claude CLI not found")
+    if args.prepare_session:
+        run_dir = Path(args.runs_dir) / (dt.datetime.now().strftime("%Y%m%d-%H%M%S") + "-session")
+        (run_dir / "out").mkdir(parents=True)
+        project = prepare_session(run_dir)
+        (run_dir / "out" / "base-commit.txt").write_text(must(["git", "rev-parse", "HEAD"], project) + "\n")
+        (run_dir / "out" / "plugin-commit.txt").write_text(must(["git", "rev-parse", "HEAD"], PLUGIN) + "\n")
+        print(project)
+        return 0
     if PROBE.exists():
         sys.exit(f"local_run: remove {PROBE} first (left over from an earlier probe)")
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S") + ("-dry" if args.dry_run else "")
