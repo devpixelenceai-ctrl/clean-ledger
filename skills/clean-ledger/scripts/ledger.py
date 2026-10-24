@@ -120,6 +120,17 @@ def is_test(path: str) -> bool:
     return bool(TEST_PATH.search(norm(path)))
 
 
+def under(path: str, roots: list[str]) -> bool:
+    """True if `path` is one of `roots` or inside one of them (`lib` matches
+    `lib/x.js`, not `library.js`)."""
+    p = norm(path)
+    for r in roots:
+        r = norm(r).strip("/")
+        if r and (p == r or p.startswith(r + "/")):
+            return True
+    return False
+
+
 # ================================================================ init
 def cmd_init(args) -> int:
     here = Path(__file__).resolve().parent
@@ -553,6 +564,16 @@ def source_untouched(c: Checks, cfg: dict):
     c.add("source code and tests unchanged (setup/measurement only)", not hits, ", ".join(sorted(set(hits)))[:300])
 
 
+def protected_untouched(c: Checks, cfg: dict):
+    """No protected path changed anywhere on the work branch."""
+    base = git("merge-base", cfg["base_branch"], "HEAD")
+    if not base:
+        c.add("no protected paths changed", False, "cannot find merge-base with base branch")
+        return
+    hits = sorted(p for p in changed_since(base) if under(p, cfg.get("protected_paths", [])))
+    c.add("no protected paths changed", not hits, ", ".join(hits)[:300])
+
+
 def commits_with_files(start: str) -> list[tuple[str, str, list[str]]]:
     out = git("log", "--reverse", "--name-only", "--format=@@%H%x09%s", f"{start}..HEAD")
     commits, cur = [], None
@@ -588,6 +609,7 @@ def verify_phase0(c: Checks, cfg: dict):
     gi = Path(".gitignore").read_text(encoding="utf-8") if Path(".gitignore").exists() else ""
     c.add(".gitignore excludes .ledger/reports/", ".ledger/reports" in gi)
     source_untouched(c, cfg)
+    protected_untouched(c, cfg)
     tests_pass(c, cfg)
     tree_clean(c)
 
@@ -605,6 +627,7 @@ def verify_phase1(c: Checks, cfg: dict):
     c.add("register lists at least one hotspot file", any(r["file"] in text for r in
           compute_hotspots(REPORTS, cfg["ccn_limit"], cfg["tier1_size"])[:5]))
     source_untouched(c, cfg)
+    protected_untouched(c, cfg)
     tree_clean(c)
 
 
@@ -622,6 +645,7 @@ def verify_phase2(c: Checks, cfg: dict):
         c.add("empty queue is explained in the register", "no tier 1" in text.lower())
     c.add("register has Tier 1 cost estimates", "monthly cost" in text.lower())
     source_untouched(c, cfg)
+    protected_untouched(c, cfg)
     tree_clean(c)
 
 
@@ -677,7 +701,7 @@ def verify_phase3(c: Checks, cfg: dict, item: str):
     c.add("characterization tests added or updated", any(is_test(p) for p in changed),
           "test files changed: " + ", ".join(p for p in changed if is_test(p))[:300])
     c.add("no test files deleted", not any(is_test(p) for p in deleted), ", ".join(deleted)[:300])
-    prot = [p for p in changed + deleted for pr in cfg.get("protected_paths", []) if p.startswith(norm(pr))]
+    prot = sorted(p for p in changed + deleted if under(p, cfg.get("protected_paths", [])))
     c.add("no protected paths touched", not prot, ", ".join(prot)[:300])
     control = (".ledger/ledger.py", ".ledger/measure.sh", ".ledger/baseline.json", ".ledger/config.json")
     stray = [p for p in changed + deleted if p in control]
@@ -726,6 +750,7 @@ def verify_phase3_overall(c: Checks, cfg: dict):
     c.add("measurement runs", ok, "" if ok else out)
     fails, _ = gate_compare(load_json(LEDGER / "baseline.json", {}), load_json(LEDGER / "metrics.json", {}), 0.1)
     c.add("whole-repo gate versus baseline passes", not fails, "; ".join(fails))
+    protected_untouched(c, cfg)
     tests_pass(c, cfg)
     tree_clean(c)
 
@@ -739,6 +764,7 @@ def verify_phase4(c: Checks, cfg: dict):
     c.add("measurement runs", ok, "" if ok else out)
     fails, _ = gate_compare(load_json(LEDGER / "baseline.json", {}), load_json(LEDGER / "metrics.json", {}), 0.1)
     c.add("gate passes locally", not fails, "; ".join(fails))
+    protected_untouched(c, cfg)
     tests_pass(c, cfg)
     tree_clean(c)
 
@@ -756,6 +782,7 @@ def verify_phase5(c: Checks, cfg: dict):
             c.add(f"fix approved: {q['file']}", approved.get(key) == "APPROVED")
         elif q["status"] == "in_progress":
             c.add(f"no unfinished item: {q['file']}", False, "in progress; finish, revert or mark skipped")
+    protected_untouched(c, cfg)
     tests_pass(c, cfg)
     tree_clean(c)
 
