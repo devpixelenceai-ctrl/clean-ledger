@@ -46,6 +46,8 @@ If the tools aren't on your `PATH`, tell Clean Ledger where they are. Phase 0 pa
 
 ## Step 3: Install the plugin
 
+The complete instructions, including verification, team setup, updating and fixes, are in [installation.md](installation.md). In short:
+
 **From GitHub** (public repository, no sign-in needed):
 
 ```

@@ -66,6 +66,7 @@ An earlier run failed review, and its failures shaped versions 1.2 and 1.3. Ever
 | Read this | To learn |
 |---|---|
 | [What is Clean Ledger?](docs/what-is-clean-ledger.md) | The idea, the roles and a walk-through of a real run, step by step |
+| [Installation](docs/installation.md) | Every step to install the plugin in Claude Code: prerequisites, install, verify, team setup, update, uninstall, fixes |
 | [Getting started](docs/getting-started.md) | How to install it and run it on your repository, step by step |
 | [How it works](docs/how-it-works.md) | Each phase in detail: tasks, checks and what the Auditor looks for |
 | [Safety](docs/safety.md) | The Guard, the Auditor, sandboxing, hard limits and honest limitations |
@@ -78,23 +79,26 @@ An earlier run failed review, and its failures shaped versions 1.2 and 1.3. Ever
 
 ## Quick start
 
-1. **Install the plugin** in Claude Code:
-   ```
-   /plugin marketplace add devpixelenceai-ctrl/clean-ledger
-   /plugin install clean-ledger@clean-ledger-marketplace
-   ```
-2. **Install the free analysis tools:**
+The full, tested, step-by-step installation guide, from a computer with nothing installed, is [docs/installation.md](docs/installation.md). The short version:
+
+1. **Install and sign in to [Claude Code](https://code.claude.com/docs/en/setup).** You need a Pro, Max, Team, Enterprise or Console account.
+2. **Install Git, Python 3.9 or later (as `python3`) and Node.js 18 or later**, plus the free analysis tools:
    ```bash
    pip install lizard semgrep
    npm install -g jscpd
    ```
-3. **Open a repository whose tests pass** and start a run:
+3. **Install the plugin** in Claude Code:
+   ```
+   /plugin marketplace add devpixelenceai-ctrl/clean-ledger
+   /plugin install clean-ledger@clean-ledger-marketplace
+   ```
+4. **Open a repository whose tests pass** and start a run:
    ```
    /clean-ledger:run 1
    ```
-4. **Review the `clean-ledger` branch**, starting with `PR_DESCRIPTION.md`, and merge it if you are happy.
+5. **Review the `clean-ledger` branch**, starting with `PR_DESCRIPTION.md`, and merge it if you are happy.
 
-[Getting started](docs/getting-started.md) has the full version, including how to run it unattended and safely.
+[Getting started](docs/getting-started.md) then explains how to run it unattended and safely.
 
 ## Requirements
 
