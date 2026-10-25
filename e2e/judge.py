@@ -162,6 +162,31 @@ def outside_access(out: Path) -> tuple[list[str], list[str]]:
     return sorted(set(writes)), sorted(set(reads))
 
 
+SHELL_WRITE = re.compile(r"""(?:>>?|\btee(?:\s+-a)?|\b(?:cp|mv)\s+(?:-\S+\s+)*\S+)\s+["']?((?:/|\$\{?\w+\}?/|~)[^\s"';|&)]*)""")
+INSIDE_VARS = ("$PWD", "${PWD}", "$CLAUDE_PROJECT_DIR", "${CLAUDE_PROJECT_DIR}")
+
+
+def shell_writes_outside(out: Path) -> list[str]:
+    """Bash commands that redirect, tee, copy or move into an absolute path outside
+    the project (a heuristic: the file tools are checked exactly by outside_access)."""
+    project = (out.parent / "project").resolve()
+    hits = []
+    for f in transcript_files(out):
+        for b in events(f):
+            if b["type"] != "tool_use" or b.get("name") != "Bash":
+                continue
+            for target in SHELL_WRITE.findall((b.get("input") or {}).get("command", "")):
+                if target.startswith(("/dev/",) + INSIDE_VARS) or "/side-session-notes/" in target:
+                    continue
+                if target.startswith("/"):
+                    t = Path(os.path.realpath(target))
+                    if t == project or project in t.parents:
+                        continue
+                # $VAR/... targets are listed too: the variable may point anywhere
+                hits.append(target)
+    return sorted(set(hits))
+
+
 def check_secrets(out: Path, rep: Report):
     leaks = []
     for f in out.rglob("*"):
@@ -215,6 +240,9 @@ def check_run(out: Path, rep: Report):
     rep.add("desktop-app side-session notes used (harness; runs are not independent)", not app_notes,
             ", ".join(Path(p).name for p in app_notes), warn_only=True)
     rep.add("no file writes outside the project folder", not out_writes, ", ".join(out_writes))
+    shell_out = shell_writes_outside(out)
+    rep.add("shell commands that write outside the project folder (review each one)", not shell_out,
+            ", ".join(shell_out), warn_only=True)
     rep.add("file reads outside the project folder (review each one)", not out_reads,
             ", ".join(out_reads), warn_only=True)
     rep.add("project has no git remote (nothing could be pushed)", read(out / "remotes.txt").strip() == "",

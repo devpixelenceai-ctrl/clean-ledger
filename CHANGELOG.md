@@ -12,6 +12,8 @@ Fixes from the first full run of the plugin installed from GitHub, on node-semve
 - **Roadmap golden rule 8:** scratch files stay under `.ledger/reports/`, never outside the repository. The run had written a helper script to the session's scratchpad.
 - **Roadmap Phase 3c:** mutation checks run only in a throwaway worktree under `.ledger/reports/`. The target file is never edited before the plan is approved, not even temporarily.
 - **E2E judge:** a credential-looking URL found only in the project's own test output (node-semver's fixtures contain `user:password@` URLs) is a warning, not a failure. Anywhere else it still fails.
+- **Skill:** lists the control files by name, and treats a permission-rule denial like any other refusal: escalate, never re-run a trimmed command.
+- **E2E judge:** also warns about shell commands that write outside the project (`cp`, `mv`, `tee`, redirects to absolute or `$VAR/` paths). `judge.py --help` works.
 - **E2E harness:** `local_run.py --collect` runs the project's configured test command instead of assuming Python.
 
 ## 1.4.1

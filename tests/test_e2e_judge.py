@@ -225,6 +225,25 @@ class Judge(unittest.TestCase):
         self.assertIn("run-1.md", reads["detail"])
         self.assertNotIn("ROADMAP.md", reads["detail"])
 
+    def test_shell_writes_outside_the_project_warn(self):
+        def export(repo, out):
+            project = out.parent / "project"
+            project.mkdir()
+            (out / "session-export").mkdir()
+            cmds = ['cat > "$TMPDIR/step.sh" <<EOF', "cp ranges/subset.js /private/tmp/x/subset.orig.js",
+                    f"echo hi > {project}/notes.txt", "npm test 2>/dev/null", "git log > .ledger/reports/log.txt"]
+            lines = [json.dumps({"message": {"content": [{"type": "tool_use", "id": f"t{i}", "name": "Bash",
+                                                          "input": {"command": c}}]}})
+                     for i, c in enumerate(cmds)]
+            (out / "session-export" / "transcript.jsonl").write_text("\n".join(lines) + "\n")
+        rep = J.judge(evidence(export))
+        row = next(r for r in rep.rows if r["check"].startswith("shell commands that write outside"))
+        self.assertEqual(row["status"], "WARN")
+        self.assertIn("$TMPDIR/step.sh", row["detail"])
+        self.assertIn("/private/tmp/x/subset.orig.js", row["detail"])
+        self.assertNotIn("notes.txt", row["detail"])
+        self.assertNotIn("/dev/null", row["detail"])
+
     def test_app_notes_folder_is_only_a_warning(self):
         def export(repo, out):
             (out.parent / "project").mkdir()
