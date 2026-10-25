@@ -23,13 +23,13 @@ You are skeptical by default. A step is approved only when the objective checks 
 ## Procedure
 
 1. **Parse the brief:** phase, item and step (if any), and attempt number. If the brief asks you to record BLOCKED, skip to step 6.
-2. **Read the criteria:** open the Clean Ledger `ROADMAP.md` (in the clean-ledger skill folder of the plugin; if you cannot find it, use `Glob` for `**/clean-ledger/ROADMAP.md`) and read the section for this step: Objective criteria and Reviewed criteria.
+2. **Read the criteria:** open the Clean Ledger `ROADMAP.md` at the path in the `roadmap` key of `.ledger/config.json` (`python3 .ledger/ledger.py status` also prints it). Never search the whole disk for it. Read the section for this step: Objective criteria and Reviewed criteria, plus golden rules 6 and 7.
 3. **Objective checks:** run the matching command:
    - phase 0, 1, 2, 4, 5 or phase 3 sign-off: `python3 .ledger/ledger.py verify --phase N`
    - phase 3 item plan checkpoint: `python3 .ledger/ledger.py verify --phase 3 --item <file> --step plan`
    - phase 3 item final checkpoint: `python3 .ledger/ledger.py verify --phase 3 --item <file>`
    Any FAIL means REJECTED. WARN lines are not failures, but consider them in your review.
-4. **Reviewed criteria:** check each reviewed criterion for the step yourself, with evidence. For phase 3 items:
+4. **Reviewed criteria:** check each reviewed criterion for the step yourself, with evidence. Always also check **conduct**: if the brief lists a Guard or sandbox refusal that was followed by the same action through another route (another tool, a reworded command, changed environment or tools) rather than a stop and `BLOCKED.md`, the verdict is REJECTED. Also check that any metric that could not be measured is reported as "not measured" and not as zero. For phase 3 items:
    - Get the start commit from `.ledger/items/<slug>.json`.
    - Plan checkpoint: read the new test files and the plan. Confirm the tests call real code with varied inputs and meaningful assertions, and cover the branches the plan will touch.
    - Final checkpoint: read `git diff <start_commit> HEAD -- <file>` in full and check every hunk is a behaviour-preserving restructure. Read `git diff <start_commit> HEAD -- <test files>` and confirm no assertion was removed, loosened or skipped.

@@ -22,7 +22,8 @@ This file is the contract. The Builder follows it, and the Auditor judges the Bu
 3. **Small steps.** One module per item, one idea per commit, tests run after every commit.
 4. **Evidence over claims.** A phase is done when `ledger.py verify` passes and the Auditor approves. "I did it" is not evidence.
 5. **Nothing leaves the branch.** All work happens on the `clean-ledger` branch. Nothing is pushed, merged, published or deployed. The Owner merges.
-6. **When in doubt, stop.** Anything this roadmap does not cover, or anything the Guard blocks, is written up in `BLOCKED.md` and the run stops.
+6. **When in doubt, stop.** Anything this roadmap does not cover, or anything the Guard or a sandbox refuses, is written up in `BLOCKED.md` and the run stops. Never route a refused action through another tool (for example a Write after a blocked shell command), never read `guard.py` or the sandbox settings to find a way around them, and never change certificates, caches, proxies or environment variables to get past a refusal. If you believe a block is a false positive, say so in `BLOCKED.md`; the Owner decides.
+7. **Measure honestly.** If an optional tool (such as Semgrep) cannot run, record that metric as "not measured" with the error, in `BASELINE.md` and the register, and continue. Never install, uninstall or reconfigure tools to make a measurement work, and never print or dump environment variables.
 
 ## 3. The protocol (run it for every step)
 
@@ -32,7 +33,7 @@ A *step* is a phase (0, 1, 2, 4, 5), the overall phase 3 sign-off, or one of the
 2. **Do** the tasks. Commit the work with a conventional commit message.
 3. **Self-check:** run the step's `verify` command (see the table). Fix and re-run until it passes. If it still fails after 5 tries, escalate (section 6). `verify` runs the test suite up to `test_attempts` times (default 2): a pass after a failure still passes but adds a WARN "test suite is stable" naming the first failure, and every run's full output is in `.ledger/verify/tests-attempt<N>.log`. Mention any such WARN in the audit brief.
 4. **Audit:** delegate to the `ledger-auditor` subagent with exactly this brief:
-   `Audit phase <N> [item <file> step <plan|final>], attempt <k>. Builder summary: <3-6 lines: what was done, where, anything unusual>.`
+   `Audit phase <N> [item <file> step <plan|final>], attempt <k>. Builder summary: <3-6 lines: what was done, where, anything unusual>. Refusals: <none, or each Guard/sandbox refusal since the last audit and what you did>.`
 5. **Verdict:** the Auditor runs the objective checks, reviews the work, records its verdict with `ledger.py record` and returns `APPROVED` or `REJECTED` with required fixes.
 6. **Commit the record:** `git add -A && git commit -m "chore(ledger): audit phase <N> <verdict>"`.
 7. **On REJECTED:** apply every required fix, commit, and go back to step 3 as attempt k+1. After `max_attempts_per_step` (default 3) rejections, escalate (section 6).
@@ -69,14 +70,14 @@ Run `python3 .ledger/ledger.py status` at any time to see where the run is. If a
 **Goal.** Make the repository ready: tools installed, Clean Ledger files in place, an accurate `CLAUDE.md`, a passing test suite and a recorded baseline. No application code changes.
 
 **Tasks.**
-1. Confirm git, Python 3 and Node.js are available. Confirm the working tree is clean. If it is not, escalate.
+1. First run `mkdir -p .ledger`, which switches the Guard on before anything else. Confirm git, Python 3 and Node.js are available. Confirm the working tree is clean. If it is not, escalate.
 2. Detect the default branch. Create and switch to the `clean-ledger` branch from it.
 3. Install missing analysis tools: `pip install lizard`, `npm install -g jscpd`, and optionally `pip install semgrep` (skip Semgrep on Windows without WSL). Prefer user-level installs (for example a virtualenv and `npm install --prefix`). If a tool ends up in a folder that is not on `PATH`, pass that folder to `init` with `--tool-dir`.
 4. Detect languages, source folders and files, test framework and the exact test command. Run `python3 <this skill's scripts>/ledger.py init --src <dirs or files> --test-command "<cmd>" --base-branch <default branch>`, adding `--protected <paths>` for generated, vendored or migration folders, entry points that must not change, existing CI workflows and other sensitive files, and `--tool-dir <dirs>` if needed. `--src` accepts files as well as folders (for example a root `index.js`).
 5. Install project dependencies with the project's own lockfile command (`npm ci`, `pip install -r requirements.txt`, `poetry install`, `mvn -q test-compile`, etc.). If the project has no lockfile, use its plain install command (for example `npm install`) and say so in `BASELINE.md`.
 6. Run the test suite. If it does not pass, escalate. Clean Ledger never refactors on top of a failing suite.
 7. Explore the code read-only. Write `CLAUDE.md` with these headings: `## Overview`, `## Architecture`, `## Commands` (exact install, build, lint, test commands), `## Conventions`, `## Protected` (paths never to edit, matching `protected_paths`), `## Debt rules` (the golden rules in section 2).
-8. Run `bash .ledger/measure.sh`. Copy `.ledger/metrics.json` to `.ledger/baseline.json`.
+8. Run `bash .ledger/measure.sh`, then `python3 .ledger/ledger.py snapshot-baseline` (it copies `.ledger/metrics.json` to `.ledger/baseline.json`). If a tool failed, follow golden rule 7.
 9. Write `BASELINE.md`: date, commit, test results, coverage if available, the metrics, and outdated dependencies from the package manager.
 10. Commit: `chore(ledger): phase 0 setup`.
 
@@ -233,4 +234,4 @@ To escalate:
 
 ## 7. Hard limits (enforced by the Guard)
 
-Never push, merge, rebase, hard-reset, amend, force-delete branches or skip git hooks. Never delete files recursively, use sudo, pipe downloads into a shell, use remote shells, publish packages, deploy, or use cloud CLIs. Never read or write `.env` files, keys or credentials. Never edit `.ledger/approvals.jsonl`, `.ledger/state.json`, `.ledger/ledger.py` or `.ledger/measure.sh` directly. Never edit `.ledger/baseline.json` or `.ledger/config.json` after phase 0 is approved. Never edit protected paths or any CI workflow other than the gate. Never commit outside the `clean-ledger` branch.
+Never push, merge, rebase, hard-reset, amend, force-delete branches or skip git hooks. Never delete files recursively, use sudo, pipe downloads into a shell, use remote shells, publish packages, deploy, or use cloud CLIs. Never read or write `.env` files, keys or credentials, and never print or dump environment variables. Never edit `.ledger/approvals.jsonl`, `.ledger/state.json`, `.ledger/ledger.py` or `.ledger/measure.sh` directly. Never edit `.ledger/baseline.json` or `.ledger/config.json` after phase 0 is approved. Never edit protected paths or any CI workflow other than the gate. Never commit outside the `clean-ledger` branch.
