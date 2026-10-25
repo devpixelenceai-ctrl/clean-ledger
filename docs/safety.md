@@ -2,6 +2,8 @@
 
 Clean Ledger lets an AI agent change your code without you approving each step. This page describes every layer that keeps that safe, and is honest about what those layers cannot do.
 
+Found a way around one of these layers? Please report it privately, as described in the [security policy](../SECURITY.md).
+
 ## Layer 1: Golden rules
 
 The roadmap's rules apply to every step:

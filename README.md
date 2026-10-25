@@ -73,6 +73,7 @@ An earlier run failed review, and its failures shaped versions 1.2 and 1.3. Ever
 | [Troubleshooting](docs/troubleshooting.md) | What to do when a run stops with `BLOCKED.md` |
 | [Testing and results](docs/testing-and-results.md) | The test suite, the end-to-end harness and real run results |
 | [Changelog](CHANGELOG.md) | What changed in each version, and why |
+| [Security policy](SECURITY.md) | How to report a vulnerability privately, what is in scope, and how this repository is protected |
 
 ## Quick start
 
