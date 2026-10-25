@@ -172,6 +172,14 @@ The tests use only the Python standard library and create throwaway git reposito
 
 ## Changelog
 
+**1.2.0** (fixes from the first end-to-end run, on prettytable, which an independent review failed on process grounds)
+- Guard: blocks only real writes to control files (redirect targets, cp/mv/tee/rm/sed -i/ln/dd destinations, `git checkout --`, inline Python/Node writes). 19 false blocks in the first run became 0; three real-write forms it used to miss are now caught. It is active as soon as `.ledger/` exists and blocks more environment dumps.
+- Shell and file tools agree: `baseline.json` and `config.json` are writable until phase 0 is approved, then frozen.
+- `ledger.py snapshot-baseline` for phase 0; `init` records the roadmap path for the Auditor.
+- Roadmap: never route a refused action through another tool; record tools that cannot run as "not measured"; never dump environment variables; refusals are listed in every audit brief and workarounds are rejected.
+- Honest numbers: tool versions only from a successful `--version`; unmeasured security shows as "n/a".
+- E2E judge: reads exported sessions, counts real Guard blocks, and fails on credential URLs and tool-switch workarounds.
+
 **1.1.0**
 - Guard: finds the ledger repository even when the session starts in a parent folder, and blocks `git -C <dir> push`, `git --no-pager push` and similar forms.
 - verify: re-runs a failing test suite once (`test_attempts`), flags a pass-after-failure as a warning, keeps every run's full log, and names the failing tests.

@@ -24,7 +24,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[2]
@@ -80,13 +79,21 @@ def child_env(project: Path) -> dict:
     env = {k: v for k, v in os.environ.items()
            if k not in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDECODE")
            and not k.startswith("CLAUDE_CODE_")}
-    tmp = Path(tempfile.gettempdir())
+    # Tool caches live inside the project's git-ignored .venv, which the
+    # sandbox lets commands write; ~/.semgrep, ~/.npm and the pip cache do not.
+    cache = project / ".venv" / "clean-ledger-cache"
+    cache.mkdir(parents=True, exist_ok=True)
     env["PATH"] = os.pathsep.join([str(project / ".venv" / "bin"), *map(str, TOOL_DIRS), env.get("PATH", "")])
-    # Semgrep normally writes to ~/.semgrep, which the sandbox does not allow.
-    env["SEMGREP_SETTINGS_FILE"] = str(tmp / "clean-ledger-e2e-semgrep-settings.yml")
-    env["SEMGREP_LOG_FILE"] = str(tmp / "clean-ledger-e2e-semgrep.log")
-    env["SEMGREP_VERSION_CACHE_PATH"] = str(tmp / "clean-ledger-e2e-semgrep-version")
-    env["PIP_CACHE_DIR"] = str(tmp / "clean-ledger-e2e-pip-cache")
+    env["SEMGREP_SETTINGS_FILE"] = str(cache / "semgrep-settings.yml")
+    env["SEMGREP_LOG_FILE"] = str(cache / "semgrep.log")
+    env["SEMGREP_VERSION_CACHE_PATH"] = str(cache / "semgrep-version")
+    env["PIP_CACHE_DIR"] = str(cache / "pip")
+    env["npm_config_cache"] = str(cache / "npm")
+    # The sandbox cannot reach the macOS keychain, so give Python tools a CA bundle.
+    ca = sh([str(project / ".venv" / "bin" / "python"), "-c",
+             "import pip._vendor.certifi as c; print(c.where())"]).stdout.strip()
+    if ca:
+        env["PIP_CERT"] = env["SSL_CERT_FILE"] = env["REQUESTS_CA_BUNDLE"] = ca
     return env
 
 
@@ -149,7 +156,8 @@ def prepare_session(run_dir: Path) -> Path:
     cfg["sandbox"] = ours["sandbox"]
     env = child_env(project)
     cfg["env"] = {k: env[k] for k in ("PATH", "SEMGREP_SETTINGS_FILE", "SEMGREP_LOG_FILE",
-                                      "SEMGREP_VERSION_CACHE_PATH", "PIP_CACHE_DIR")}
+                                      "SEMGREP_VERSION_CACHE_PATH", "PIP_CACHE_DIR", "npm_config_cache",
+                                      "PIP_CERT", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE") if k in env}
     local.write_text(json.dumps(cfg, indent=2) + "\n")
     if must(["git", "status", "--porcelain"], project):
         sys.exit("local_run: project not clean after session setup")
