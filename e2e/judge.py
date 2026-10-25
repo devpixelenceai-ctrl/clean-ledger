@@ -170,7 +170,13 @@ def check_secrets(out: Path, rep: Report):
     rep.add("no API key or token in the evidence", not leaks, ", ".join(leaks))
     cred = sorted({f.name for f in out.rglob("*") if f.is_file() and f.suffix != ".bundle"
                    and CREDENTIAL_URL.search(read(f))})
+    # The project's own test output can contain fake credentials from its fixtures
+    # (node-semver tests parse "git+https://user:password0123@github.com/foo").
+    in_test_output = [n for n in cred if n.startswith("final-tests")]
+    cred = [n for n in cred if n not in in_test_output]
     rep.add("no credentials (user:password@ URLs) in the evidence", not cred, ", ".join(cred))
+    rep.add("credential-like URLs in the project's test output (fixtures? review)", not in_test_output,
+            ", ".join(in_test_output), warn_only=True)
 
 
 def check_run(out: Path, rep: Report):
@@ -318,9 +324,9 @@ def judge(out: Path) -> Report:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 2 or sys.argv[1] in ("-h", "--help"):
         print(__doc__, file=sys.stderr)
-        return 2
+        return 0 if sys.argv[1:] in (["-h"], ["--help"]) else 2
     out = Path(sys.argv[1]).resolve()
     rep = judge(out)
     print(write_report(out, rep))

@@ -20,12 +20,14 @@ Run from the repository root. After `init`, the script lives at `.ledger/ledger.
 | `hotspots [--markdown \| --json] [--limit N]` | Ranks files into Tiers 1–3. |
 | `snapshot-baseline` | Phase 0: copies `metrics.json` to `baseline.json`. Refused after Phase 0 approval. |
 | `queue` | Writes `.ledger/queue.json` with the Tier 1 items. |
+| `queue --order <file> ...` | Phase 2: puts the queue in fix order. Must name every queued file exactly once, with security items first. |
 | `start-item <file>` | Snapshots a file's metrics and the start commit before fixing it. |
 | `skip-item <file> --reason "<why>"` | Marks a reverted item as skipped. |
 | `verify --phase N [--item <file>] [--step plan\|final]` | Runs the objective checks. Exits 1 on any FAIL, and saves the result in `.ledger/verify/`. |
 | `record --phase N [--item <file>] [--step plan] --verdict APPROVED\|REJECTED\|BLOCKED --attempt K --notes "…"` | **Auditor only.** Appends a verdict to `approvals.jsonl` and updates `state.json`. Refuses an approval without a passing `verify` at the current commit. |
 | `render-gate --template <assets/ledger-gate.yml>` | Writes the CI gate workflow, with tool versions pinned to those installed. |
 | `gate [--baseline f] [--current f] [--dup-tolerance 0.1]` | Compares current metrics with the baseline. Exits 1 if debt grew. |
+| `raise-baseline` | **Owner only, after Phase 5 approval.** Copies `metrics.json` to `baseline.json` after a reviewed paydown. Refuses if any metric is worse than the baseline. |
 | `status` | Prints the run's progress and the roadmap path. |
 
 `bash .ledger/measure.sh` runs lizard, jscpd, Semgrep (if installed) and churn the same way locally and in CI. It writes `.ledger/reports/` and `.ledger/metrics.json`.
@@ -59,7 +61,7 @@ Written by Phase 0, and frozen once Phase 0 is approved.
 ```
 .ledger/
   config.json          configuration (frozen after phase 0)
-  baseline.json        metrics at the start (frozen after phase 0)
+  baseline.json        metrics at the start (frozen after phase 0 until the Owner runs raise-baseline)
   state.json           phase and item status (written only by ledger.py)
   approvals.jsonl      the audit trail: every verdict with its commit
   queue.json           the Tier 1 fix queue

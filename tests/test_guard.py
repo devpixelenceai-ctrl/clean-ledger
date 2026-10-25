@@ -47,6 +47,19 @@ class GuardInLedgerRepo(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertEqual(bash(cmd, self.repo).returncode, 2)
 
+    def test_allows_read_only_git_plumbing_with_similar_names(self):
+        # from the node-semver run: `git merge-base` was blocked as a merge
+        git(self.repo, "switch", "-q", "main")
+        for cmd in ("git merge-base main HEAD", "git log -1 --format=%H main; git merge-base main HEAD",
+                    "git push-test-name --help 2>/dev/null || true", "git rev-parse HEAD && git merge-tree --help >/dev/null"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(bash(cmd, self.repo).returncode, 0)
+
+    def test_real_merge_and_push_still_blocked(self):
+        for cmd in ("git merge main", "git merge --no-ff main", "git push", "git rebase main"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(bash(cmd, self.repo).returncode, 2)
+
     def test_allows_harmless_git_with_global_options(self):
         for cmd in ("git -C . status", "git --no-pager log --oneline -3", "git -C . diff"):
             with self.subTest(cmd=cmd):

@@ -2,6 +2,18 @@
 
 Each release after 1.0.0 came out of a real run of Clean Ledger, checked by an automated judge and an independent reviewer. See [docs/testing-and-results.md](docs/testing-and-results.md) for those runs.
 
+## 1.5.0
+
+Fixes from the first full run of the plugin installed from GitHub, on node-semver (JavaScript). Every phase was approved, and `ranges/subset.js` went from complexity 84 to 12 with all 8,756 assertions still passing. The run also exposed these gaps:
+
+- **New `ledger.py queue --order <files>`.** Phase 2 now sets the fix order with a command instead of hand-editing `queue.json`. It refuses a list that drops, adds or repeats a file, or puts a non-security item before a security one.
+- **New `ledger.py raise-baseline`** for the Owner after a reviewed paydown. It works only after Phase 5 is approved, and refuses if any metric is worse than the baseline, so it can only tighten the gate. The getting-started guide and the Phase 4 `## Quality gate` text now use it.
+- **Guard:** read-only git plumbing with similar names, such as `git merge-base`, is no longer blocked as a `git merge`.
+- **Roadmap golden rule 8:** scratch files stay under `.ledger/reports/`, never outside the repository. The run had written a helper script to the session's scratchpad.
+- **Roadmap Phase 3c:** mutation checks run only in a throwaway worktree under `.ledger/reports/`. The target file is never edited before the plan is approved, not even temporarily.
+- **E2E judge:** a credential-looking URL found only in the project's own test output (node-semver's fixtures contain `user:password@` URLs) is a warning, not a failure. Anywhere else it still fails.
+- **E2E harness:** `local_run.py --collect` runs the project's configured test command instead of assuming Python.
+
 ## 1.4.1
 
 Fixes from the first test of the plugin installed from GitHub, run on node-semver. The run stopped correctly at phase 0 with `BLOCKED.md`.

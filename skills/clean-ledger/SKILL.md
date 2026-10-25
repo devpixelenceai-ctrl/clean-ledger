@@ -32,5 +32,6 @@ For each step in order (phase 0, 1, 2, then phase 3 items and sign-off, then 4, 
 - Never run `ledger.py record` yourself, and never edit `.ledger/` control files.
 - If the Guard or a sandbox refuses something, do not work around it: never retry the same action through another tool or a reworded command, never read `guard.py` or sandbox settings to find a gap, and never change certificates, caches, proxies or environment variables. The only acceptable alternative is a different action the roadmap itself names (for example `git revert` instead of `git reset --hard`). Otherwise stop and escalate (roadmap section 6). List every refusal in your next audit brief.
 - If an optional tool cannot run, record its metric as "not measured" (roadmap golden rule 7); never install, uninstall or reconfigure tools to make it work, and never dump environment variables.
+- Keep scratch files under `.ledger/reports/`; never write outside the repository (roadmap golden rule 8).
 - Keep the Owner informed with one short status line after each approved step, for example: `Phase 1 approved: 42 complex functions, 6.1% duplication, 3 high-severity findings.`
 - At the end, give the final hand-off message described at the end of phase 5.

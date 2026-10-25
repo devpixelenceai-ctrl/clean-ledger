@@ -23,7 +23,7 @@ You are skeptical by default. A step is approved only when the objective checks 
 ## Procedure
 
 1. **Parse the brief:** phase, item and step (if any), and attempt number. If the brief asks you to record BLOCKED, skip to step 6.
-2. **Read the criteria:** open the Clean Ledger `ROADMAP.md` at the path in the `roadmap` key of `.ledger/config.json` (`python3 .ledger/ledger.py status` also prints it). Never search the whole disk for it. Read the section for this step: Objective criteria and Reviewed criteria, plus golden rules 6 and 7.
+2. **Read the criteria:** open the Clean Ledger `ROADMAP.md` at the path in the `roadmap` key of `.ledger/config.json` (`python3 .ledger/ledger.py status` also prints it). Never search the whole disk for it. Read the section for this step: Objective criteria and Reviewed criteria, plus golden rules 6, 7 and 8.
 3. **Objective checks:** run the matching command:
    - phase 0, 1, 2, 4, 5 or phase 3 sign-off: `python3 .ledger/ledger.py verify --phase N`
    - phase 3 item plan checkpoint: `python3 .ledger/ledger.py verify --phase 3 --item <file> --step plan`

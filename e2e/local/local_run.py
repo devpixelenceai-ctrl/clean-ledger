@@ -174,7 +174,14 @@ def collect(project: Path, out: Path, base: str):
                       "git-status.txt": ["git", "status", "--porcelain"],
                       "git-log.txt": ["git", "log", "--all", "--format=%H %D | %s"]}.items():
         (out / name).write_text(sh(cmd, project).stdout)
-    t = sh([str(project / ".venv" / "bin" / "python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], project)
+    # Re-run the project's tests with the command the run itself configured
+    # (any language); fall back to the default prettytable venv.
+    cfg = project / ".ledger" / "config.json"
+    test_cmd = json.loads(cfg.read_text()).get("test_command", "") if cfg.exists() else ""
+    if test_cmd:
+        t = subprocess.run(test_cmd, shell=True, cwd=project, capture_output=True, text=True, timeout=3600)
+    else:
+        t = sh([str(project / ".venv" / "bin" / "python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], project)
     (out / "final-tests.txt").write_text(t.stdout + t.stderr)
     (out / "final-tests-exit.txt").write_text(f"{t.returncode}\n")
 

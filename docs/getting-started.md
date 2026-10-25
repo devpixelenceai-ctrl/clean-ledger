@@ -158,12 +158,17 @@ When the run finishes, the Builder ends with a short hand-off message. Then:
 
 If you are satisfied, merge the `clean-ledger` branch. Clean Ledger never merges for you.
 
-Then raise the CI gate's baseline so the gains are locked in. This is an Owner action. Do it in your own terminal, not through Claude Code: the Guard deliberately freezes the baseline for Claude once Phase 0 is approved.
+Then raise the CI gate's baseline so the gains are locked in. This is an Owner action. Do it in your own terminal, not through Claude Code: the baseline is frozen for Claude once Phase 0 is approved.
 
 ```bash
 bash .ledger/measure.sh
-cp .ledger/metrics.json .ledger/baseline.json
 ```
+
+```bash
+python3 .ledger/ledger.py raise-baseline
+```
+
+`raise-baseline` works only after Phase 5 is approved, and it refuses if any metric is worse than the current baseline, so it can only tighten the gate.
 
 Update `BASELINE.md` to match, and commit both files in a commit you review.
 

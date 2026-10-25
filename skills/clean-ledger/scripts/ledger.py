@@ -13,7 +13,8 @@ Setup and measurement
 Workflow state
   snapshot-baseline  Phase 0: copy metrics.json to baseline.json (refused after phase 0)
   render-gate Write the CI gate workflow with pinned tool versions
-  queue       Build .ledger/queue.json (the Tier 1 fix queue) from hotspots
+  queue       Build .ledger/queue.json (the Tier 1 fix queue) from hotspots; --order f1 f2 ... reorders it
+  raise-baseline  Owner, after merging: current metrics become the baseline (never loosens the gate)
   start-item  Snapshot a file's metrics before fixing it
   skip-item   Take a file out of the queue with a reason (after it is reverted)
   verify      Objective acceptance checks for a phase (exit 1 on any FAIL)
@@ -501,7 +502,29 @@ def file_metrics(path: str) -> dict:
 
 
 # ================================================================ queue / items
+def reorder_queue(order: list[str]) -> int:
+    """Phase 2: put the queue in estimated-cost order. Items with high-severity
+    security findings must stay ahead of the rest (roadmap: security first)."""
+    queue = load_json(QUEUE, []) or []
+    files = [q["file"] for q in queue]
+    order = [norm(f) for f in order]
+    if len(set(order)) != len(order) or sorted(order) != sorted(files):
+        print("ledger queue --order: name every queued file exactly once; queued: " + ", ".join(files), file=sys.stderr)
+        return 2
+    by_file = {q["file"]: q for q in queue}
+    new = [by_file[f] for f in order]
+    security = [i for i, q in enumerate(new) if q.get("sec_high", 0) > 0]
+    if security and max(security) >= len(security):
+        print("ledger queue --order: items with high-severity security findings must come first", file=sys.stderr)
+        return 2
+    save_json(QUEUE, new)
+    print(f"ledger: reordered {QUEUE}: " + ", ".join(order))
+    return 0
+
+
 def cmd_queue(args) -> int:
+    if args.order:
+        return reorder_queue(args.order)
     cfg = config()
     rows = compute_hotspots(REPORTS, cfg["ccn_limit"], cfg["tier1_size"])
     existing = {q["file"]: q for q in (load_json(QUEUE, []) or [])}
@@ -556,6 +579,29 @@ def cmd_snapshot_baseline(args) -> int:
         return 2
     save_json(LEDGER / "baseline.json", metrics)
     print("ledger: wrote .ledger/baseline.json from .ledger/metrics.json")
+    return 0
+
+
+def cmd_raise_baseline(args) -> int:
+    """Owner, after merging a reviewed paydown: make the current metrics the new
+    baseline. Refused during a run (before phase 5 is approved) and whenever any
+    gated metric is worse than the baseline, so it can only tighten the gate."""
+    state = load_json(STATE, {}) or {}
+    if state.get("phases", {}).get("5") != "approved":
+        print("ledger raise-baseline: refused; a run is in progress (phase 5 is not approved)", file=sys.stderr)
+        return 2
+    base, cur = load_json(LEDGER / "baseline.json"), load_json(LEDGER / "metrics.json")
+    if not isinstance(base, dict) or not isinstance(cur, dict):
+        print("ledger raise-baseline: need .ledger/baseline.json and .ledger/metrics.json "
+              "(run `bash .ledger/measure.sh` first)", file=sys.stderr)
+        return 2
+    failures, notes = gate_compare(base, cur, 0.0)
+    if failures:
+        print("ledger raise-baseline: refused; these metrics are worse than the baseline:\n  "
+              + "\n  ".join(failures), file=sys.stderr)
+        return 2
+    save_json(LEDGER / "baseline.json", cur)
+    print("ledger: raised .ledger/baseline.json to the current metrics\n  " + "\n  ".join(notes))
     return 0
 
 
@@ -1084,7 +1130,11 @@ def main() -> int:
     s.set_defaults(func=cmd_snapshot_baseline)
 
     s = sub.add_parser("queue")
+    s.add_argument("--order", nargs="+", help="reorder the existing queue (estimated cost, security first)")
     s.set_defaults(func=cmd_queue)
+
+    s = sub.add_parser("raise-baseline")
+    s.set_defaults(func=cmd_raise_baseline)
 
     s = sub.add_parser("start-item")
     s.add_argument("file")

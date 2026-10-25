@@ -24,6 +24,7 @@ This file is the contract. The Builder follows it, and the Auditor judges the Bu
 5. **Nothing leaves the branch.** All work happens on the `clean-ledger` branch. Nothing is pushed, merged, published or deployed. The Owner merges.
 6. **When in doubt, stop.** Anything this roadmap does not cover, or anything the Guard or a sandbox refuses, is written up in `BLOCKED.md` and the run stops. Never route a refused action through another tool (for example a Write after a blocked shell command), never read `guard.py` or the sandbox settings to find a way around them, and never change certificates, caches, proxies or environment variables to get past a refusal. If you believe a block is a false positive, say so in `BLOCKED.md`; the Owner decides. (The plugin's own `measure.sh` and `ledger.py` retry Semgrep once with Python's CA bundle when a sandbox hides the OS certificate store, and log it. That built-in fallback is the only sanctioned exception; the Builder never does this by hand.)
 7. **Measure honestly.** If an optional tool (such as Semgrep) cannot run, record that metric as "not measured" with the error, in `BASELINE.md` and the register, and continue. Never install, uninstall or reconfigure tools to make a measurement work, and never print or dump environment variables.
+8. **Stay inside the repository.** Scratch files (helper scripts, golden-output generators, notes) go under `.ledger/reports/`, which is git-ignored. Never write outside the repository, including a tool's own scratchpad or temp folder.
 
 ## 3. The protocol (run it for every step)
 
@@ -123,9 +124,10 @@ Run `python3 .ledger/ledger.py status` at any time to see where the run is. If a
 **Tasks.**
 1. Run `python3 .ledger/ledger.py queue`. This writes `.ledger/queue.json` with Tier 1 items (high-severity security findings, plus the top-scoring complex hotspots).
 2. Estimate a monthly cost for each Tier 1 item: hours lost per month × `hourly_cost` from the config. If `hourly_cost` is not set, use 75 and say so. Base the hours on change frequency, number of authors and complexity, and show the assumption.
-3. In `## Hotspots`, add a "Tier 1 queue" table: order, file, why, estimated monthly cost. Label every money figure as an estimate.
-4. If the queue is empty, write "No Tier 1 items" and the reason in the register; phase 3 will then be signed off with no items.
-5. Commit: `chore(ledger): phase 2 prioritise`.
+3. Put the queue in fix order: security items first, then the highest estimated cost. Run `python3 .ledger/ledger.py queue --order <file> <file> ...` naming every queued file in that order (it refuses a list that drops, adds or repeats a file, or puts a non-security item before a security one). Never edit `queue.json` by hand.
+4. In `## Hotspots`, add a "Tier 1 queue" table: order, file, why, estimated monthly cost, in the same order as `queue.json`. Label every money figure as an estimate.
+5. If the queue is empty, write "No Tier 1 items" and the reason in the register; phase 3 will then be signed off with no items.
+6. Commit: `chore(ledger): phase 2 prioritise`.
 
 **Objective criteria (verify --phase 2).** `queue.json` exists; every queued file exists and is named in the register; the register contains monthly cost estimates (or explains an empty queue); no source or test files changed; no protected paths changed; the working tree is clean.
 
@@ -144,7 +146,7 @@ Work through `queue.json` in order, skipping items marked `done` or `skipped`. F
 
 **3b. Understand.** Read the file, its callers and its tests. Identify public interfaces, hidden business rules and side effects.
 
-**3c. Protect.** Write characterization tests that lock in current behaviour: every branch you can reach, edge cases, error paths, and odd current behaviour. Mark any existing bug with a comment and keep its current behaviour. Golden-master or snapshot tests are fine for complex output. Run the tests against the unchanged code; they must pass. Commit: `test(<module>): characterization tests for <file>`.
+**3c. Protect.** Write characterization tests that lock in current behaviour: every branch you can reach, edge cases, error paths, and odd current behaviour. Mark any existing bug with a comment and keep its current behaviour. Golden-master or snapshot tests are fine for complex output. Run the tests against the unchanged code; they must pass. To check that the tests catch changes (mutation checks), work only in a throwaway copy: `git worktree add --detach .ledger/reports/mutation HEAD`, mutate and test there, then `git worktree remove --force .ledger/reports/mutation`. Never edit the target file itself before the plan is approved, not even temporarily. Commit: `test(<module>): characterization tests for <file>`.
 
 **3d. Plan.** Write `.ledger/items/<slug>-plan.md` (the slug is printed by start-item, e.g. `src-billing-py`). It contains numbered steps, each with the change, its risk (low/medium/high) and how it will be verified. It also states the public interfaces that must not change. Commit: `docs(ledger): refactor plan for <file>`.
 
@@ -189,7 +191,7 @@ Work through `queue.json` in order, skipping items marked `done` or `skipped`. F
 1. Detect the CI system. For GitHub, run `python3 .ledger/ledger.py render-gate --template <this skill>/assets/ledger-gate.yml`. It writes `ci_file` with read-only permissions, no persisted checkout credentials, and lizard, jscpd and Semgrep pinned to the versions installed locally (the versions recorded in the baseline). For another CI system, write the equivalent at the path in `ci_file` with the same pins (update the config only during phase 0; otherwise use the default path).
 2. `render-gate` leaves out the Semgrep install when Semgrep is not installed locally, so CI measures the same things as the baseline. Do not remove the pins.
 3. If the repository has no Dependabot or Renovate config, add `.github/dependabot.yml` for the project's package ecosystems with a weekly schedule and a limit of 5 open pull requests.
-4. Add a short `## Quality gate` section to `CLAUDE.md` explaining the gate and how to raise the baseline after a reviewed paydown.
+4. Add a short `## Quality gate` section to `CLAUDE.md` explaining the gate and how the Owner raises the baseline after a reviewed paydown: `bash .ledger/measure.sh && python3 .ledger/ledger.py raise-baseline` (it works only after phase 5 is approved and refuses if any metric is worse than the baseline). The Builder never raises the baseline.
 5. Commit: `ci(ledger): add technical debt gate`.
 
 **Objective criteria (verify --phase 4).** The CI workflow exists and runs `ledger.py gate`; it pins the tool versions recorded in `.ledger/baseline.json`; measurement runs; the gate passes locally; no protected paths changed; tests pass; tree clean.

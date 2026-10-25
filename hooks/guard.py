@@ -19,17 +19,18 @@ from pathlib import Path
 # `git` followed by any global options (-C <dir>, -c k=v, --no-pager, ...) before
 # the subcommand, so `git -C repo push` is caught like `git push`.
 _ARG = r"""(?:"[^"]*"|'[^']*'|\S+)"""
+END = r"(?![\w-])"  # end of a git subcommand: `merge` but not `merge-base`
 GIT = r"\bgit(?:\s+-[Cc]\s+" + _ARG + r"|\s+--[\w-]+(?:=" + _ARG + r")?|\s+-[A-Za-z])*\s+"
 
 BLOCKED_COMMANDS = [
-    (GIT + r"push\b", "pushing is reserved for the human owner"),
-    (GIT + r"merge\b", "merging is reserved for the human owner"),
-    (GIT + r"rebase\b", "rebasing rewrites history"),
+    (GIT + r"push" + END, "pushing is reserved for the human owner"),
+    (GIT + r"merge" + END, "merging is reserved for the human owner"),
+    (GIT + r"rebase" + END, "rebasing rewrites history"),
     (GIT + r"reset\s+--hard\b", "hard reset can destroy work; use git revert"),
     (GIT + r"clean\s+-[a-z]*f", "git clean deletes untracked files"),
     (GIT + r"branch\s+-D\b", "force-deleting branches is not allowed"),
-    (GIT + r"(commit|tag)\b.*--no-verify\b", "skipping git hooks is not allowed"),
-    (GIT + r"commit\b.*--amend\b", "amending rewrites history; make a new commit"),
+    (GIT + r"(commit|tag)" + END + r".*--no-verify\b", "skipping git hooks is not allowed"),
+    (GIT + r"commit" + END + r".*--amend\b", "amending rewrites history; make a new commit"),
     (GIT + r"(filter-branch|filter-repo|update-ref)\b", "history rewriting is not allowed"),
     (r"\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r", "recursive force delete is not allowed"),
     (r"\bsudo\b", "sudo is not allowed"),
@@ -271,7 +272,7 @@ def main() -> None:
             hit = sorted({w for w in written if w in controls})
             if hit:
                 block(f"{', '.join(hit)} change only through ledger.py (`record`, `snapshot-baseline`)")
-        commit = re.search(GIT + r"commit\b", cmd)
+        commit = re.search(GIT + r"commit" + END, cmd)
         if commit:
             branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root,
                                     capture_output=True, text=True).stdout.strip()

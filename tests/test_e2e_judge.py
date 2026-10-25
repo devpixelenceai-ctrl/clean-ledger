@@ -157,6 +157,13 @@ class Judge(unittest.TestCase):
             (out / "claude-stderr.log").write_text("HTTP_PROXY=http://srt.abc123:s3cr3tpass@localhost:49743\n")
         self.assertFails(leak, "no credentials")
 
+    def test_fixture_credentials_in_project_test_output_only_warn(self):
+        def fixture(repo, out):
+            (out / "final-tests.txt").write_text("ok parse git+https://user:password0123@github.com/foo\n42 passed\n")
+        rep = J.judge(evidence(fixture))
+        self.assertTrue(rep.passed, [r for r in rep.rows if r["status"] == "FAIL"])
+        self.assertTrue(any("test output" in r["check"] and r["status"] == "WARN" for r in rep.rows))
+
     def test_plain_urls_are_not_credentials(self):
         def urls(repo, out):
             (out / "claude-stderr.log").write_text("see https://example.com/a and git@github.com:x/y.git\n")
