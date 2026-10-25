@@ -30,8 +30,13 @@ PLUGIN = Path(__file__).resolve().parents[2]
 SETTINGS = Path(__file__).resolve().parent / "settings.json"
 TEST_REPO = "https://github.com/prettytable/prettytable.git"
 TEST_REF = "3.18.0"
-PYTHON = "/opt/homebrew/bin/python3.12"
-TOOL_DIRS = [Path.home() / ".debt-tools" / "venv" / "bin", Path.home() / ".debt-tools" / "node_modules" / ".bin"]
+# Machine-specific: a Python 3.10+ for the test project, and the folders that hold
+# lizard/jscpd/semgrep. Override with CLEAN_LEDGER_E2E_PYTHON and
+# CLEAN_LEDGER_E2E_TOOL_DIRS (os.pathsep-separated).
+PYTHON = os.environ.get("CLEAN_LEDGER_E2E_PYTHON", shutil.which("python3.12") or "python3")
+TOOL_DIRS = [Path(p) for p in os.environ.get("CLEAN_LEDGER_E2E_TOOL_DIRS", os.pathsep.join([
+    str(Path.home() / ".debt-tools" / "venv" / "bin"),
+    str(Path.home() / ".debt-tools" / "node_modules" / ".bin")])).split(os.pathsep) if p]
 PROBE = Path.home() / "clean-ledger-sandbox-probe.txt"
 
 DRY_RUN_PROMPT = f"""This is a sandbox probe. Run each command below as its own Bash call,
