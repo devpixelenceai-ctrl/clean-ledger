@@ -172,6 +172,9 @@ The tests use only the Python standard library and create throwaway git reposito
 
 ## Changelog
 
+**1.2.1**
+- `measure.sh` keeps Semgrep's settings, log and version cache in `.ledger/reports/semgrep-home/` unless set, so Semgrep runs in sandboxes that forbid writing `~/.semgrep`.
+
 **1.2.0** (fixes from the first end-to-end run, on prettytable, which an independent review failed on process grounds)
 - Guard: blocks only real writes to control files (redirect targets, cp/mv/tee/rm/sed -i/ln/dd destinations, `git checkout --`, inline Python/Node writes). 19 false blocks in the first run became 0; three real-write forms it used to miss are now caught. It is active as soon as `.ledger/` exists and blocks more environment dumps.
 - Shell and file tools agree: `baseline.json` and `config.json` are writable until phase 0 is approved, then frozen.

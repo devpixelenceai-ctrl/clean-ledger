@@ -10,6 +10,12 @@ TOOL_DIRS="$(python3 -c 'import json,os;print(os.pathsep.join(os.path.expanduser
 if [ -n "$TOOL_DIRS" ]; then export PATH="$TOOL_DIRS:$PATH"; fi
 OUT=.ledger/reports
 mkdir -p "$OUT"
+# Semgrep writes settings and caches under ~/.semgrep, which sandboxes often
+# forbid; keep them in the (git-ignored) reports folder unless already set.
+mkdir -p "$OUT/semgrep-home"
+export SEMGREP_SETTINGS_FILE="${SEMGREP_SETTINGS_FILE:-$PWD/$OUT/semgrep-home/settings.yml}"
+export SEMGREP_LOG_FILE="${SEMGREP_LOG_FILE:-$PWD/$OUT/semgrep-home/semgrep.log}"
+export SEMGREP_VERSION_CACHE_PATH="${SEMGREP_VERSION_CACHE_PATH:-$PWD/$OUT/semgrep-home/version}"
 IGNORE_GLOBS="**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/test/**,**/tests/**,**/__tests__/**,**/*.min.js"
 echo "ledger measure: source folders = $SRC"
 

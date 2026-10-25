@@ -62,6 +62,11 @@ class ToolDirs(unittest.TestCase):
         text = (PLUGIN / "skills" / "clean-ledger" / "scripts" / "measure.sh").read_text()
         self.assertIn("tool_dirs", text)
 
+    def test_measure_script_keeps_semgrep_files_out_of_home(self):
+        text = (PLUGIN / "skills" / "clean-ledger" / "scripts" / "measure.sh").read_text()
+        for var in ("SEMGREP_SETTINGS_FILE", "SEMGREP_LOG_FILE", "SEMGREP_VERSION_CACHE_PATH"):
+            self.assertIn(f'export {var}="${{{var}:-$PWD/$OUT/semgrep-home/', text)
+
 
 class RenderGate(unittest.TestCase):
     def render(self, versions: dict[str, str]) -> str:

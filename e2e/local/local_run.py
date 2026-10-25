@@ -67,6 +67,16 @@ def prepare(run_dir: Path) -> Path:
     must(["git", "config", "user.email", "e2e@localhost.invalid"], project)
     must([PYTHON, "-m", "venv", str(project / ".venv")])
     must([str(project / ".venv" / "bin" / "pip"), "install", "-q", "-e", f"{project}[tests]"])
+    # Inside the Bash sandbox, env settings may not reach the shell and pip
+    # cannot use the macOS keychain. So the tools are linked into .venv/bin and
+    # pip's site config (always read) points at a CA bundle.
+    for d in TOOL_DIRS:
+        for tool in ("lizard", "jscpd", "semgrep"):
+            src, dst = d / tool, project / ".venv" / "bin" / tool
+            if src.exists() and not dst.exists():
+                dst.symlink_to(src)
+    ca = must([str(project / ".venv" / "bin" / "python"), "-c", "import pip._vendor.certifi as c; print(c.where())"])
+    (project / ".venv" / "pip.conf").write_text(f"[global]\ncert = {ca}\n")
     tests = sh([str(project / ".venv" / "bin" / "python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], project)
     if tests.returncode != 0:
         sys.exit("local_run: the test project's own suite fails before the run:\n" + tests.stdout[-2000:])
