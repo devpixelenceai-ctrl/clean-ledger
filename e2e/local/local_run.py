@@ -62,14 +62,34 @@ def must(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> st
     return r.stdout.strip()
 
 
-def prepare(run_dir: Path) -> Path:
-    """Fresh clone at the tag on local `main`, no remote, project venv in .venv (git-ignored)."""
+def prepare(run_dir: Path, repo: str = TEST_REPO, ref: str = TEST_REF, setup: str | None = None) -> Path:
+    """Fresh clone at the ref on local `main`, no remote. Without `setup` (the
+    default prettytable test): a project venv in .venv (git-ignored) with the
+    tools linked into .venv/bin. With `setup` (any other project): the shell
+    command is run once here, and the tools are linked into .clean-ledger-tools/,
+    which is kept out of git through .git/info/exclude."""
     project = run_dir / "project"
-    must(["git", "clone", "-q", TEST_REPO, str(project)])
-    must(["git", "checkout", "-q", "-B", "main", TEST_REF], project)
+    must(["git", "clone", "-q", repo, str(project)])
+    must(["git", "checkout", "-q", "-B", "main", ref], project)
     must(["git", "remote", "remove", "origin"], project)
     must(["git", "config", "user.name", "Clean Ledger E2E"], project)
     must(["git", "config", "user.email", "e2e@localhost.invalid"], project)
+    if setup is not None:
+        with open(project / ".git" / "info" / "exclude", "a") as fh:
+            fh.write("\n.clean-ledger-tools/\n")
+        tools = project / ".clean-ledger-tools"
+        (tools / "cache").mkdir(parents=True)
+        for d in TOOL_DIRS:
+            for tool in ("lizard", "jscpd", "semgrep"):
+                if (d / tool).exists() and not (tools / tool).exists():
+                    (tools / tool).symlink_to(d / tool)
+        r = subprocess.run(setup, shell=True, cwd=project, capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"local_run: setup command failed:\n{(r.stdout + r.stderr)[-2000:]}")
+        if must(["git", "status", "--porcelain"], project):
+            sys.exit("local_run: project working tree is not clean after setup:\n"
+                     + must(["git", "status", "--porcelain"], project))
+        return project
     must([PYTHON, "-m", "venv", str(project / ".venv")])
     must([str(project / ".venv" / "bin" / "pip"), "install", "-q", "-e", f"{project}[tests]"])
     # Inside the Bash sandbox, env settings may not reach the shell and pip
@@ -96,18 +116,21 @@ def child_env(project: Path) -> dict:
     env = {k: v for k, v in os.environ.items()
            if k not in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDECODE")
            and not k.startswith("CLAUDE_CODE_")}
-    # Tool caches live inside the project's git-ignored .venv, which the
+    # Tool caches live inside a git-ignored folder of the project, which the
     # sandbox lets commands write; ~/.semgrep, ~/.npm and the pip cache do not.
-    cache = project / ".venv" / "clean-ledger-cache"
+    home = project / ".clean-ledger-tools" if (project / ".clean-ledger-tools").is_dir() else project / ".venv"
+    cache = home / "cache" if home.name == ".clean-ledger-tools" else home / "clean-ledger-cache"
     cache.mkdir(parents=True, exist_ok=True)
-    env["PATH"] = os.pathsep.join([str(project / ".venv" / "bin"), *map(str, TOOL_DIRS), env.get("PATH", "")])
+    tool_bin = home if home.name == ".clean-ledger-tools" else home / "bin"
+    env["PATH"] = os.pathsep.join([str(tool_bin), *map(str, TOOL_DIRS), env.get("PATH", "")])
     env["SEMGREP_SETTINGS_FILE"] = str(cache / "semgrep-settings.yml")
     env["SEMGREP_LOG_FILE"] = str(cache / "semgrep.log")
     env["SEMGREP_VERSION_CACHE_PATH"] = str(cache / "semgrep-version")
     env["PIP_CACHE_DIR"] = str(cache / "pip")
     env["npm_config_cache"] = str(cache / "npm")
     # The sandbox cannot reach the macOS keychain, so give Python tools a CA bundle.
-    ca = sh([str(project / ".venv" / "bin" / "python"), "-c",
+    venv_python = project / ".venv" / "bin" / "python"
+    ca = sh([str(venv_python) if venv_python.exists() else sys.executable, "-c",
              "import pip._vendor.certifi as c; print(c.where())"]).stdout.strip()
     if ca:
         env["PIP_CERT"] = env["SSL_CERT_FILE"] = env["REQUESTS_CA_BUNDLE"] = ca
@@ -156,14 +179,17 @@ def collect(project: Path, out: Path, base: str):
     (out / "final-tests-exit.txt").write_text(f"{t.returncode}\n")
 
 
-def prepare_session(run_dir: Path) -> Path:
+def prepare_session(run_dir: Path, repo: str = TEST_REPO, ref: str = TEST_REF, setup: str | None = None,
+                    plugin_source: str | None = None) -> Path:
     """Set up a project for a Claude Code *desktop* session to run Clean Ledger in:
     plugin enabled for this folder only (local scope), sandbox and permission
-    settings in .claude/settings.local.json, and .claude/ kept out of git."""
-    project = prepare(run_dir)
+    settings in .claude/settings.local.json, and .claude/ kept out of git.
+    `plugin_source` is a marketplace source such as a GitHub "owner/repo"
+    (installs exactly like a user would); default: this checkout."""
+    project = prepare(run_dir, repo, ref, setup)
     with open(project / ".git" / "info" / "exclude", "a") as fh:
         fh.write("\n.claude/\n")
-    for cmd in (["claude", "plugin", "marketplace", "add", str(PLUGIN), "--scope", "local"],
+    for cmd in (["claude", "plugin", "marketplace", "add", plugin_source or str(PLUGIN), "--scope", "local"],
                 ["claude", "plugin", "install", "clean-ledger@clean-ledger-marketplace", "--scope", "local"]):
         must(cmd, project)
     local = project / ".claude" / "settings.local.json"
@@ -187,6 +213,10 @@ def main() -> int:
     ap.add_argument("--prepare-session", action="store_true",
                     help="prepare a folder for a desktop-app session to run in, then stop")
     ap.add_argument("--collect", metavar="RUN_DIR", help="collect evidence from a finished session run and judge it")
+    ap.add_argument("--repo", default=TEST_REPO, help="test project to clone (default: prettytable)")
+    ap.add_argument("--ref", default=TEST_REF, help="tag or branch of the test project")
+    ap.add_argument("--setup", help="shell command to prepare a non-default project (e.g. 'npm install')")
+    ap.add_argument("--plugin-source", help="marketplace source to install from, e.g. owner/clean-ledger")
     ap.add_argument("--max-fixes", type=int, default=1)
     ap.add_argument("--budget", type=float, default=20.0)
     ap.add_argument("--timeout-min", type=int, default=180)
@@ -205,7 +235,7 @@ def main() -> int:
     if args.prepare_session:
         run_dir = Path(args.runs_dir) / (dt.datetime.now().strftime("%Y%m%d-%H%M%S") + "-session")
         (run_dir / "out").mkdir(parents=True)
-        project = prepare_session(run_dir)
+        project = prepare_session(run_dir, args.repo, args.ref, args.setup, args.plugin_source)
         (run_dir / "out" / "base-commit.txt").write_text(must(["git", "rev-parse", "HEAD"], project) + "\n")
         (run_dir / "out" / "plugin-commit.txt").write_text(must(["git", "rev-parse", "HEAD"], PLUGIN) + "\n")
         print(project)
