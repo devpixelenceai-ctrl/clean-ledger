@@ -189,7 +189,10 @@ def prepare_session(run_dir: Path, repo: str = TEST_REPO, ref: str = TEST_REF, s
     project = prepare(run_dir, repo, ref, setup)
     with open(project / ".git" / "info" / "exclude", "a") as fh:
         fh.write("\n.claude/\n")
+    # `marketplace update` matters: an already-known marketplace is otherwise
+    # served from Claude Code's cache, so a fresh install can get an old version.
     for cmd in (["claude", "plugin", "marketplace", "add", plugin_source or str(PLUGIN), "--scope", "local"],
+                ["claude", "plugin", "marketplace", "update", "clean-ledger-marketplace"],
                 ["claude", "plugin", "install", "clean-ledger@clean-ledger-marketplace", "--scope", "local"]):
         must(cmd, project)
     local = project / ".claude" / "settings.local.json"
