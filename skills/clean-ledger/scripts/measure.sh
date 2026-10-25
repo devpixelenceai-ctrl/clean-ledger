@@ -34,8 +34,21 @@ jscpd $SRC --absolute --reporters json --output "$OUT" --ignore "$IGNORE_GLOBS" 
 rm -f "$OUT/semgrep.json"
 if command -v semgrep >/dev/null 2>&1; then
   # shellcheck disable=SC2086
-  semgrep scan --config p/default --metrics=off --json --quiet -o "$OUT/semgrep.json" $SRC \
-    || echo "ledger measure: semgrep failed, security not measured"
+  if ! semgrep scan --config p/default --metrics=off --json --quiet -o "$OUT/semgrep.json" $SRC 2>"$OUT/semgrep-stderr.log"; then
+    # Sandboxes often hide the OS certificate store from Semgrep ("empty trust
+    # anchors"). Retry once with Python's CA bundle, and say so.
+    rm -f "$OUT/semgrep.json"
+    CA="$(python3 -c 'import certifi; print(certifi.where())' 2>/dev/null \
+          || python3 -c 'import pip._vendor.certifi as c; print(c.where())' 2>/dev/null || true)"
+    # shellcheck disable=SC2086
+    if [ -n "$CA" ] && SSL_CERT_FILE="$CA" semgrep scan --config p/default --metrics=off --json --quiet \
+         -o "$OUT/semgrep.json" $SRC 2>>"$OUT/semgrep-stderr.log"; then
+      echo "ledger measure: semgrep needed the CA bundle fallback ($CA)"
+    else
+      rm -f "$OUT/semgrep.json"
+      echo "ledger measure: semgrep failed, security not measured (see $OUT/semgrep-stderr.log)"
+    fi
+  fi
 else
   echo "ledger measure: semgrep not installed, security not measured"
 fi

@@ -76,7 +76,9 @@ def prepare(run_dir: Path) -> Path:
             if src.exists() and not dst.exists():
                 dst.symlink_to(src)
     ca = must([str(project / ".venv" / "bin" / "python"), "-c", "import pip._vendor.certifi as c; print(c.where())"])
-    (project / ".venv" / "pip.conf").write_text(f"[global]\ncert = {ca}\n")
+    # cert alone is not enough: pip >= 24.2 still asks the OS trust store unless
+    # legacy-certs is set (verified under a sandbox profile that denies trustd).
+    (project / ".venv" / "pip.conf").write_text(f"[global]\ncert = {ca}\nuse-deprecated = legacy-certs\n")
     tests = sh([str(project / ".venv" / "bin" / "python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], project)
     if tests.returncode != 0:
         sys.exit("local_run: the test project's own suite fails before the run:\n" + tests.stdout[-2000:])

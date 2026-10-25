@@ -63,6 +63,26 @@ class ToolVersions(unittest.TestCase):
         self.assertIsNone(m["tools"]["semgrep"])
 
 
+class ToolVersionCaFallback(unittest.TestCase):
+    def test_retries_with_a_ca_bundle(self):
+        tools = Path(tempfile.mkdtemp())
+        sg = tools / "semgrep"
+        sg.write_text('#!/bin/sh\nif [ -z "$SSL_CERT_FILE" ]; then echo "ca-certs: empty trust anchors" >&2; exit 2; fi\n'
+                      'echo 1.182.1\n')
+        sg.chmod(sg.stat().st_mode | stat.S_IEXEC)
+        r = repo()
+        cfg = json.loads((r / ".ledger" / "config.json").read_text())
+        cfg["tool_dirs"] = [str(tools)]
+        (r / ".ledger" / "config.json").write_text(json.dumps(cfg))
+        reports = r / ".ledger" / "reports"
+        reports.mkdir(parents=True)
+        res = ledger(r, "metrics", "--reports", str(reports), env={"PATH": "/usr/bin:/bin", "SSL_CERT_FILE": ""})
+        m = json.loads(res.stdout)
+        import importlib.util
+        has_ca = any(importlib.util.find_spec(n) for n in ("certifi", "pip"))
+        self.assertEqual(m["tools"]["semgrep"], "1.182.1" if has_ca else None)
+
+
 class UnmeasuredSecurity(unittest.TestCase):
     def hotspots(self, with_semgrep: bool) -> str:
         r = repo()

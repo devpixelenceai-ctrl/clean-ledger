@@ -128,19 +128,38 @@ def tool_env() -> dict:
     return {**os.environ, "PATH": tool_path()}
 
 
+def ca_bundle() -> str | None:
+    """A CA bundle file from certifi (or pip's vendored copy), if available."""
+    for mod in ("certifi", "pip._vendor.certifi"):
+        try:
+            return __import__(mod, fromlist=["where"]).where()
+        except Exception:  # noqa: BLE001 - any import problem means "not available"
+            continue
+    return None
+
+
 def tool_versions() -> dict:
-    """Installed version of each analysis tool, or None if it is not found."""
+    """Installed version of each analysis tool, or None if it is not found or
+    its `--version` fails. Semgrep crashes at start-up when a sandbox hides the
+    OS certificate store, so a failure is retried once with a CA bundle (the
+    same fallback measure.sh uses)."""
     out = {}
     for tool in TOOLS:
         exe = shutil.which(tool, path=tool_path())
         version = None
         if exe:
-            try:
-                r = sh([exe, "--version"], timeout=120)
+            envs = [None]
+            if ca_bundle():
+                envs.append({**os.environ, "SSL_CERT_FILE": ca_bundle()})
+            for env in envs:
+                try:
+                    r = sh([exe, "--version"], timeout=120, env=env)
+                except (OSError, subprocess.TimeoutExpired):
+                    continue
                 m = VERSION.search(r.stdout + r.stderr) if r.returncode == 0 else None
-                version = m.group(0) if m else None
-            except (OSError, subprocess.TimeoutExpired):
-                pass
+                if m:
+                    version = m.group(0)
+                    break
         out[tool] = version
     return out
 

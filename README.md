@@ -172,6 +172,9 @@ The tests use only the Python standard library and create throwaway git reposito
 
 ## Changelog
 
+**1.2.2**
+- Semgrep in sandboxes that hide the OS certificate store: `measure.sh` and the tool-version check retry once with Python's CA bundle and log it (reproduced and verified under a macOS sandbox profile that blocks the certificate service).
+
 **1.2.1**
 - `measure.sh` keeps Semgrep's settings, log and version cache in `.ledger/reports/semgrep-home/` unless set, so Semgrep runs in sandboxes that forbid writing `~/.semgrep`.
 
