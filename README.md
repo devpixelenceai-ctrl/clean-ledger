@@ -78,7 +78,7 @@ An earlier run failed review, and its failures shaped versions 1.2 and 1.3. Ever
 
 1. **Install the plugin** in Claude Code:
    ```
-   /plugin marketplace add <OWNER>/clean-ledger
+   /plugin marketplace add devpixelenceai-ctrl/clean-ledger
    /plugin install clean-ledger@clean-ledger-marketplace
    ```
 2. **Install the free analysis tools:**
