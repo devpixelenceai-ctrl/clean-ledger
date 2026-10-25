@@ -46,7 +46,7 @@ If the tools aren't on your `PATH`, tell Clean Ledger where they are. Phase 0 pa
 
 ## Step 3: Install the plugin
 
-**From GitHub** (the repository is private: you need read access, and Claude Code must be able to clone it with your git credentials):
+**From GitHub** (public repository, no sign-in needed):
 
 ```
 /plugin marketplace add devpixelenceai-ctrl/clean-ledger
