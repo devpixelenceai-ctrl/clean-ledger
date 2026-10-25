@@ -2,6 +2,19 @@
 
 Each release after 1.0.0 came out of a real run of Clean Ledger, checked by an automated judge and an independent reviewer. See [docs/testing-and-results.md](docs/testing-and-results.md) for those runs.
 
+## 1.4.0
+
+- **Fleet runner** (`runner/clean_ledger_fleet.py`, [docs/fleet.md](docs/fleet.md)):
+  - Runs Clean Ledger on many repositories in parallel. Each one gets a fresh clone, pinned to a ref, with no git remote.
+  - Executors: `docker` (a throwaway container per repository, from `runner/Dockerfile`), `local` (headless and sandboxed) or `command`.
+  - Every repository is judged with the e2e judge, and the results go into `fleet-report.md` and `fleet-summary.json`.
+  - A free `plan` mode checks every repository and the executor without calling Claude.
+- **Security policy** ([SECURITY.md](SECURITY.md)): private vulnerability reporting, scope, and how the repository is protected.
+- **This repository:**
+  - a GitHub Actions test workflow (read-only token, actions pinned to full commit hashes) and Dependabot for the pins;
+  - published with a clean history and a no-reply commit email;
+  - secret scanning with push protection, Dependabot alerts, a protected `main` branch, and GitHub-owned, hash-pinned actions only.
+
 ## 1.3.0
 
 Fixes for the minor issues found by the second prettytable end-to-end run. That run passed: the judge returned PASS and the review returned PASS WITH ISSUES.

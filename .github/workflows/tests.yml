@@ -38,7 +38,7 @@ jobs:
       - name: Shell syntax
         run: |
           bash -n skills/clean-ledger/scripts/measure.sh
-          bash -n e2e/run.sh e2e/container/e2e-run e2e/container/e2e-smoke
+          bash -n e2e/run.sh e2e/container/e2e-run e2e/container/e2e-smoke runner/container/fleet-run
 
       - name: Test suite
         run: ./tests/run_tests.sh

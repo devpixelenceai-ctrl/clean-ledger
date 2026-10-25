@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Inside the fleet container: run Clean Ledger on /work/project unattended, then
+# run the project's own tests here (never on the host) and write evidence to /out.
+set -uo pipefail
+: "${MAX_FIXES:=1}"
+: "${MAX_BUDGET_USD:=20}"
+: "${RUN_TIMEOUT:=180m}"
+: "${MODEL:=}"
+
+if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  echo "fleet-run: no ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN in the environment" >&2
+  exit 3
+fi
+
+cd /work/project
+model_args=()
+[ -n "$MODEL" ] && model_args=(--model "$MODEL")
+started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+timeout "$RUN_TIMEOUT" claude -p "/clean-ledger:run $MAX_FIXES" \
+  --permission-mode bypassPermissions \
+  --output-format stream-json --verbose \
+  --max-budget-usd "$MAX_BUDGET_USD" \
+  "${model_args[@]}" \
+  > /out/transcript.jsonl 2> /out/claude-stderr.log
+status=$?
+printf '{"started": "%s", "finished": "%s", "claude_exit": %s, "executor": "docker"}\n' \
+  "$started" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status" > /out/run-status.json
+
+# The project's own test command, as configured by the run (inside the container).
+test_cmd=$(python3 -c 'import json;print(json.load(open(".ledger/config.json")).get("test_command",""))' 2>/dev/null || true)
+if [ -n "$test_cmd" ]; then
+  bash -c "$test_cmd" > /out/final-tests.txt 2>&1; echo $? > /out/final-tests-exit.txt
+fi
+exit "$status"

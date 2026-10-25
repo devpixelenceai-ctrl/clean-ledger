@@ -86,4 +86,5 @@ hooks/                 hooks.json, guard.py
 commands/              run.md, status.md, review.md
 tests/                 the test suite (Python standard library only)
 e2e/                   the end-to-end harness: Docker image, local runner, judge
+runner/                the fleet runner (clean_ledger_fleet.py), its Docker image and an example fleet file
 ```

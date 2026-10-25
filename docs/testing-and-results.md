@@ -8,7 +8,7 @@ Clean Ledger is tested at two levels: a fast automated test suite, and end-to-en
 ./tests/run_tests.sh
 ```
 
-There are 83 tests, using only the Python standard library. Each one builds throwaway git repositories. They cover:
+There are 90 tests, using only the Python standard library, and they run on every push through GitHub Actions on Python 3.9 and 3.12. Each one builds throwaway git repositories. They cover:
 
 | File | Covers |
 |---|---|
@@ -18,6 +18,7 @@ There are 83 tests, using only the Python standard library. Each one builds thro
 | `test_sources.py` | Files in `src_dirs`; jscpd path resolution; per-file duplicate counting |
 | `test_tools_and_gate.py` | `tool_dirs`, tool versions, `render-gate` pins and hardening, the Phase 4 pin check, Semgrep paths in `measure.sh` |
 | `test_ledger_round2.py` | `snapshot-baseline`, the roadmap path, honest tool versions (including the CA fallback), "n/a" security |
+| `test_fleet.py` | The fleet runner: config validation, isolated clones without remotes, parallel runs with a stand-in agent, judging and the fleet report |
 | `test_e2e_judge.py` | The end-to-end judge: every failure it must catch, plus session-mode handling |
 
 Each fix was written test-first: the new test failed on the old code before the fix went in.

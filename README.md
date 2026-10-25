@@ -71,6 +71,7 @@ An earlier run failed review, and its failures shaped versions 1.2 and 1.3. Ever
 | [Safety](docs/safety.md) | The Guard, the Auditor, sandboxing, hard limits and honest limitations |
 | [Reference](docs/reference.md) | Commands, `ledger.py` subcommands, configuration and the files it adds |
 | [Troubleshooting](docs/troubleshooting.md) | What to do when a run stops with `BLOCKED.md` |
+| [Fleet runner](docs/fleet.md) | Running Clean Ledger on many repositories in parallel, isolated and judged, with one report |
 | [Testing and results](docs/testing-and-results.md) | The test suite, the end-to-end harness and real run results |
 | [Changelog](CHANGELOG.md) | What changed in each version, and why |
 | [Security policy](SECURITY.md) | How to report a vulnerability privately, what is in scope, and how this repository is protected |
@@ -103,10 +104,10 @@ An earlier run failed review, and its failures shaped versions 1.2 and 1.3. Ever
 
 ## Status
 
-Version 1.3.0, lightly field-tested:
+Version 1.4.0, lightly field-tested:
 - one manual run on Express (JavaScript);
 - three unattended runs on prettytable (Python): the last passed, one failed review, and one stopped correctly on an environment problem;
-- 83 automated tests.
+- 90 automated tests, run on every push by GitHub Actions.
 
 Run it on a small, non-critical repository first, and read its audit trail before trusting it with important code.
 
