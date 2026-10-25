@@ -11,6 +11,8 @@ Setup and measurement
   gate        Fail (exit 1) if debt grew versus the baseline
 
 Workflow state
+  snapshot-baseline  Phase 0: copy metrics.json to baseline.json (refused after phase 0)
+  render-gate Write the CI gate workflow with pinned tool versions
   queue       Build .ledger/queue.json (the Tier 1 fix queue) from hotspots
   start-item  Snapshot a file's metrics before fixing it
   skip-item   Take a file out of the queue with a reason (after it is reverted)
@@ -135,7 +137,7 @@ def tool_versions() -> dict:
         if exe:
             try:
                 r = sh([exe, "--version"], timeout=120)
-                m = VERSION.search(r.stdout + r.stderr)
+                m = VERSION.search(r.stdout + r.stderr) if r.returncode == 0 else None
                 version = m.group(0) if m else None
             except (OSError, subprocess.TimeoutExpired):
                 pass
@@ -182,6 +184,9 @@ def cmd_init(args) -> int:
         cfg["protected_paths"] = args.protected
     if args.tool_dir:
         cfg["tool_dirs"] = args.tool_dir
+    roadmap = here.parent / "ROADMAP.md"
+    if roadmap.exists():
+        cfg["roadmap"] = str(roadmap)
     save_json(CONFIG, cfg)
     gi = Path(".gitignore")
     lines = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
@@ -377,6 +382,7 @@ def compute_hotspots(reports: Path, ccn_limit: int, tier1: int) -> list[dict]:
             "nloc": per_file[f]["nloc"],
             "duplicated_lines": match_dup(f, dup.get("per_file", {}) if dup else {}),
             "sec_high": s["high"], "sec_medium": s["medium"], "sec_low": s["low"],
+            "security_measured": sem["present"],
             "score": round(cr[f] * xr[f] * (1 + weight), 3),
         })
     rows.sort(key=lambda r: (-r["score"], r["file"]))
@@ -389,6 +395,13 @@ def compute_hotspots(reports: Path, ccn_limit: int, tier1: int) -> list[dict]:
             r["tier"] = 3
     rows.sort(key=lambda r: (r["tier"], -r["score"], r["file"]))
     return rows
+
+
+def security_cell(r: dict) -> str:
+    """H/M/L counts, or n/a when Semgrep did not run (never 0/0/0)."""
+    if not r.get("security_measured", True):
+        return "n/a"
+    return f"{r['sec_high']}/{r['sec_medium']}/{r['sec_low']}"
 
 
 def cmd_hotspots(args) -> int:
@@ -407,7 +420,7 @@ def cmd_hotspots(args) -> int:
         for r in shown:
             print(f"| {r['tier']} | `{r['file']}` | {r['changes']} | {r['authors']} | {r['max_ccn']} | "
                   f"{r['complex_functions']} | {r['duplicated_lines']} | "
-                  f"{r['sec_high']}/{r['sec_medium']}/{r['sec_low']} | {r['score']} |")
+                  f"{security_cell(r)} | {r['score']} |")
     else:
         w = csv.DictWriter(sys.stdout, fieldnames=list(shown[0].keys()), lineterminator="\n")
         w.writeheader()
@@ -508,6 +521,22 @@ def cmd_start_item(args) -> int:
             q["status"] = "in_progress"
     save_json(QUEUE, queue)
     print(json.dumps(snap, indent=2))
+    return 0
+
+
+def cmd_snapshot_baseline(args) -> int:
+    """Phase 0: copy .ledger/metrics.json to .ledger/baseline.json. Refused
+    once phase 0 is approved (the baseline is frozen from then on)."""
+    state = load_json(STATE, {}) or {}
+    if state.get("phases", {}).get("0") == "approved":
+        print("ledger snapshot-baseline: refused; the baseline is frozen after phase 0 approval", file=sys.stderr)
+        return 2
+    metrics = load_json(LEDGER / "metrics.json")
+    if not isinstance(metrics, dict):
+        print("ledger snapshot-baseline: no .ledger/metrics.json; run `bash .ledger/measure.sh` first", file=sys.stderr)
+        return 2
+    save_json(LEDGER / "baseline.json", metrics)
+    print("ledger: wrote .ledger/baseline.json from .ledger/metrics.json")
     return 0
 
 
@@ -972,6 +1001,8 @@ def cmd_status(args) -> int:
         return 0
     names = {0: "setup", 1: "measure", 2: "prioritise", 3: "fix", 4: "prevent", 5: "report"}
     print(f"Started: {state.get('started')}")
+    if config().get("roadmap"):
+        print(f"Roadmap: {config()['roadmap']}")
     queue = load_json(QUEUE, []) or []
     for i in range(6):
         label = state.get("phases", {}).get(str(i), "pending")
@@ -1029,6 +1060,9 @@ def main() -> int:
     s.add_argument("--current", default=str(LEDGER / "metrics.json"))
     s.add_argument("--dup-tolerance", type=float, default=0.1)
     s.set_defaults(func=cmd_gate)
+
+    s = sub.add_parser("snapshot-baseline")
+    s.set_defaults(func=cmd_snapshot_baseline)
 
     s = sub.add_parser("queue")
     s.set_defaults(func=cmd_queue)
