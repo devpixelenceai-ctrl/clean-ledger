@@ -264,7 +264,7 @@ For runs without permission prompts, Clean Ledger ships two settings templates. 
 | Template | What it does |
 |---|---|
 | `settings.json` | Allow-list: common commands run without prompting; dangerous ones are denied |
-| `settings.sandboxed.json` | The allow-list **plus** Claude Code's Bash sandbox: writes stay in the repository, network access is limited, credential folders can't be read. Recommended for unattended runs |
+| `settings.sandboxed.json` | The allow-list **plus** Claude Code's Bash sandbox: writes stay in the repository, network access is limited to package registries and Semgrep, and credential folders and Claude Code's own transcripts and settings can't be read. The installed plugin's files stay readable. Recommended for unattended runs |
 
 ```bash
 mkdir -p .claude

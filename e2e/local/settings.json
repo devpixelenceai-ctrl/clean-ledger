@@ -66,7 +66,25 @@
       "Read(~/.docker/**)",
       "Read(~/.gnupg/**)",
       "Read(~/.netrc)",
-      "Read(~/.claude/**)",
+      "Read(~/.claude/projects/**)",
+      "Read(~/.claude/sessions/**)",
+      "Read(~/.claude/session-env/**)",
+      "Read(~/.claude/shell-snapshots/**)",
+      "Read(~/.claude/file-history/**)",
+      "Read(~/.claude/backups/**)",
+      "Read(~/.claude/ide/**)",
+      "Read(~/.claude/telemetry/**)",
+      "Read(~/.claude/todos/**)",
+      "Read(~/.claude/statsig/**)",
+      "Read(~/.claude/history.jsonl)",
+      "Read(~/.claude/.credentials.json)",
+      "Read(~/.claude/.claude.json)",
+      "Read(~/.claude/settings.json)",
+      "Read(~/.claude/settings.local.json)",
+      "Read(~/.claude/remote-settings.json)",
+      "Read(~/.claude/policy-limits.json)",
+      "Read(~/.claude/mcp-needs-auth-cache.json)",
+      "Read(~/.claude.json)",
       "Read(~/Library/Keychains/**)",
       "Read(**/.env)",
       "Read(**/.env.*)",
@@ -80,11 +98,42 @@
     "allowUnsandboxedCommands": false,
     "failIfUnavailable": true,
     "network": {
-      "allowedDomains": ["pypi.org", "files.pythonhosted.org", "semgrep.dev"]
+      "allowedDomains": [
+        "pypi.org",
+        "files.pythonhosted.org",
+        "semgrep.dev",
+        "registry.npmjs.org"
+      ]
     },
     "filesystem": {
-      "denyRead": ["~/.ssh", "~/.aws", "~/.config/gh", "~/.docker", "~/.gnupg", "~/.netrc",
-                   "~/.claude", "~/Library/Keychains"]
+      "denyRead": [
+        "~/.ssh",
+        "~/.aws",
+        "~/.config/gh",
+        "~/.docker",
+        "~/.gnupg",
+        "~/.netrc",
+        "~/.claude/projects",
+        "~/.claude/sessions",
+        "~/.claude/session-env",
+        "~/.claude/shell-snapshots",
+        "~/.claude/file-history",
+        "~/.claude/backups",
+        "~/.claude/ide",
+        "~/.claude/telemetry",
+        "~/.claude/todos",
+        "~/.claude/statsig",
+        "~/.claude/history.jsonl",
+        "~/.claude/.credentials.json",
+        "~/.claude/.claude.json",
+        "~/.claude/settings.json",
+        "~/.claude/settings.local.json",
+        "~/.claude/remote-settings.json",
+        "~/.claude/policy-limits.json",
+        "~/.claude/mcp-needs-auth-cache.json",
+        "~/.claude.json",
+        "~/Library/Keychains"
+      ]
     }
   }
 }

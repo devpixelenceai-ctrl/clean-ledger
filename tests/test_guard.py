@@ -71,6 +71,22 @@ class GuardInLedgerRepo(unittest.TestCase):
     def test_allows_commit_on_work_branch(self):
         self.assertEqual(bash("git commit -m x", self.repo).returncode, 0)
 
+    def test_allows_commit_after_switching_to_the_work_branch_in_the_same_command(self):
+        git(self.repo, "switch", "-q", "main")
+        for cmd in ("git switch -c clean-ledger && git add -A && git commit -m x",
+                    "git checkout -b clean-ledger && git commit -m x",
+                    "git switch clean-ledger; git commit -m x"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(bash(cmd, self.repo).returncode, 0)
+
+    def test_still_blocks_commit_before_or_without_a_switch_to_the_work_branch(self):
+        git(self.repo, "switch", "-q", "main")
+        for cmd in ("git commit -m x && git switch -c clean-ledger",
+                    "git switch -c other && git commit -m x",
+                    "echo clean-ledger && git commit -m x"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(bash(cmd, self.repo).returncode, 2)
+
 
 class GuardFindsRepoFromParentFolder(unittest.TestCase):
     """The session may start in a parent folder of the ledger repo (fix #1)."""

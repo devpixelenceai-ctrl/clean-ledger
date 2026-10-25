@@ -2,6 +2,21 @@
 
 Each release after 1.0.0 came out of a real run of Clean Ledger, checked by an automated judge and an independent reviewer. See [docs/testing-and-results.md](docs/testing-and-results.md) for those runs.
 
+## 1.4.1
+
+Fixes from the first test of the plugin installed from GitHub, run on node-semver. The run stopped correctly at phase 0 with `BLOCKED.md`.
+
+- **`settings.sandboxed.json` blocked the plugin from reading its own files.** It denied all of `~/.claude`, but a plugin installed from a GitHub marketplace lives in `~/.claude/plugins/cache/`, so the Builder could not read `ROADMAP.md`. The template now blocks only the sensitive parts:
+  - transcripts and project memory;
+  - sessions, history and file history;
+  - settings;
+  - credentials.
+
+  It now also blocks `~/.claude.json`, which it missed before.
+- **The sandbox template allows `registry.npmjs.org`,** so JavaScript projects can install their dependencies.
+- **Guard:** a commit in the same command that first switches to the work branch is allowed, for example `git switch -c clean-ledger && git commit …`. Previously it was blocked, because the hook runs while HEAD is still on the old branch.
+- **E2E harness:** `local_run.py` takes any repository (`--repo`, `--ref`, `--setup`) and can install the plugin from a marketplace (`--plugin-source owner/repo`), just as a user would.
+
 ## 1.4.0
 
 - **Fleet runner** (`runner/clean_ledger_fleet.py`, [docs/fleet.md](docs/fleet.md)):

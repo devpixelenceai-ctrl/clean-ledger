@@ -271,11 +271,16 @@ def main() -> None:
             hit = sorted({w for w in written if w in controls})
             if hit:
                 block(f"{', '.join(hit)} change only through ledger.py (`record`, `snapshot-baseline`)")
-        if re.search(GIT + r"commit\b", cmd):
+        commit = re.search(GIT + r"commit\b", cmd)
+        if commit:
             branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root,
                                     capture_output=True, text=True).stdout.strip()
             work = cfg.get("branch", "clean-ledger")
-            if branch and branch != work:
+            # `git switch -c <work> && git commit ...` is fine: the commit lands on
+            # the work branch even though HEAD is elsewhere when the hook runs.
+            switch = re.search(GIT + r"(switch(\s+-[cC])?|checkout(\s+-[bB])?)\s+" + re.escape(work) + r"(\s|;|&|$)",
+                               cmd[:commit.start()])
+            if branch and branch != work and not switch:
                 block(f"commits are only allowed on the '{work}' branch (currently on '{branch}')")
         sys.exit(0)
 
