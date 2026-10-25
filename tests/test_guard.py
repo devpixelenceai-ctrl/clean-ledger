@@ -97,8 +97,9 @@ class GuardFindsRepoFromParentFolder(unittest.TestCase):
         r = edit(self.repo / ".ledger" / "approvals.jsonl", self.parent, tool="Write")
         self.assertEqual(r.returncode, 2, r.stderr)
 
-    def test_blocks_baseline_shell_overwrite_after_cd(self):
-        r = bash('cd app && cp x.json .ledger/baseline.json', self.parent)
+    def test_blocks_control_file_shell_overwrite_after_cd(self):
+        # baseline.json is writable until phase 0 is approved (see test_guard_control)
+        r = bash('cd app && cp x.json .ledger/state.json', self.parent)
         self.assertEqual(r.returncode, 2, r.stderr)
 
 

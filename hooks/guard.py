@@ -42,11 +42,24 @@ BLOCKED_COMMANDS = [
     (r"\b(aws|gcloud|az)\s", "cloud CLIs are not allowed"),
     (r"\bgh\s+(pr\s+merge|release|repo\s+delete|secret)\b", "this GitHub action is reserved for the owner"),
     (r"(^|[;&|\s])(cat|less|more|head|tail|grep)\s[^;&|]*\.env\b", "reading secret files is not allowed"),
-    (r"\bprintenv\b|(^|[;&|]\s*)env\s*($|[;&|])", "dumping environment variables is not allowed"),
+    (r"\bprintenv\b|(^|[;&|(]\s*)env\s*($|[;&|)])|\bexport\s+-p\b|\bdeclare\s+-[a-zA-Z]*x|/proc/[^\s/]+/environ"
+     r"|(^|[;&|(]\s*)set\s*($|[;&|)])",
+     "dumping environment variables is not allowed"),
 ]
 
 SECRET_PATH = re.compile(r"(^|/)(\.env(\..*)?|.*\.pem|.*\.key|id_rsa.*|credentials.*|secrets?/.*)$", re.I)
 CONTROL_FILES = {".ledger/approvals.jsonl", ".ledger/state.json", ".ledger/ledger.py", ".ledger/measure.sh"}
+FROZEN_AFTER_PHASE0 = {".ledger/baseline.json", ".ledger/config.json"}
+
+SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "\n"}
+REDIRECTS = {">", ">>", ">|", "&>", "&>>", "<>"}
+# Commands whose path arguments they modify: all of them, or only the last.
+MODIFY_ALL = {"rm", "unlink", "truncate", "shred", "tee", "touch", "mv"}
+MODIFY_LAST = {"cp", "install", "ln", "rsync"}
+WRAPPERS = {"command", "builtin", "nohup", "time", "env", "xargs", "exec"}
+CODE_WRITE = re.compile(r"write_text|write_bytes|\.unlink\(|os\.remove|os\.rename|os\.replace|shutil\."
+                        r"|open\([^)]*['\"][wax+]|writeFileSync|appendFileSync|unlinkSync")
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n(.*?)\n\s*\2\s*(?:\n|$)", re.S)
 
 
 def block(reason: str) -> None:
@@ -99,13 +112,115 @@ def candidate_dirs(data: dict, tool: str, tin: dict) -> list[Path]:
     return out
 
 
+def control_paths(root: Path) -> set[str]:
+    """Files only `ledger.py` may change; baseline and config join them once
+    phase 0 is approved."""
+    paths = set(CONTROL_FILES)
+    try:
+        state = json.loads((root / ".ledger" / "state.json").read_text(encoding="utf-8"))
+        if state.get("phases", {}).get("0") == "approved":
+            paths |= FROZEN_AFTER_PHASE0
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return paths
+
+
+def norm_target(target: str, here: Path, root: Path) -> str:
+    p = Path(os.path.expanduser(target))
+    p = p if p.is_absolute() else here / p
+    try:
+        return Path(os.path.realpath(p)).relative_to(os.path.realpath(root)).as_posix()
+    except ValueError:
+        return p.as_posix()
+
+
+def simple_commands(tokens: list[str]) -> list[list[str]]:
+    out, cur = [], []
+    for t in tokens:
+        if t in SEPARATORS:
+            if cur:
+                out.append(cur)
+            cur = []
+        else:
+            cur.append(t)
+    if cur:
+        out.append(cur)
+    return out
+
+
+def written_paths(cmd: str, cwd: Path, root: Path) -> list[str] | None:
+    """Repo-relative paths a shell command writes, as far as can be told.
+    None means the command could not be parsed."""
+    code_chunks = [m.group(3) for m in HEREDOC.finditer(cmd)]
+    body_free = HEREDOC.sub(lambda m: m.group(0).split("\n", 1)[0] + "\n", cmd)
+    try:
+        lex = shlex.shlex(body_free, posix=True, punctuation_chars=";&|()<>")
+        lex.whitespace_split = True
+        lex.whitespace = " \t\r"
+        tokens = list(lex)
+    except ValueError:
+        return None
+    written: list[str] = []
+    here = cwd
+    for words in simple_commands(tokens):
+        args, i = [], 0
+        while i < len(words):
+            w = words[i]
+            if w in REDIRECTS and i + 1 < len(words):
+                target = words[i + 1]
+                if not (target.startswith("&") or target == "/dev/null" or target.isdigit()):
+                    written.append(norm_target(target, here, root))
+                i += 2
+                continue
+            if w in (">&", "<&", "<", "<<", "<<<", "<<-"):
+                i += 2
+                continue
+            if w.isdigit() and i + 1 < len(words) and words[i + 1] in REDIRECTS | {">&"}:
+                i += 1
+                continue
+            args.append(w)
+            i += 1
+        while args and (re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", args[0]) or args[0] in WRAPPERS):
+            args = args[1:]
+        if not args:
+            continue
+        name, rest = os.path.basename(args[0]), args[1:]
+        paths = [a for a in rest if not a.startswith("-")]
+        if name == "cd":
+            here = Path(os.path.expanduser(paths[0])) if paths and Path(paths[0]).is_absolute() \
+                else here / (paths[0] if paths else str(Path.home()))
+        elif name in MODIFY_ALL:
+            written += [norm_target(a, here, root) for a in paths]
+        elif name in MODIFY_LAST and paths:
+            written.append(norm_target(paths[-1], here, root))
+        elif name in ("sed", "perl") and any(a.startswith("-i") or a.startswith("-pi") for a in rest):
+            written += [norm_target(a, here, root) for a in paths]
+        elif name == "dd":
+            written += [norm_target(a[3:], here, root) for a in rest if a.startswith("of=")]
+        elif name == "git" and set(rest) & {"checkout", "restore", "rm", "mv"}:
+            written += [norm_target(a, here, root) for a in paths
+                        if a not in ("checkout", "restore", "rm", "mv")]
+        elif re.match(r"^(python[\d.]*|node|perl|ruby)$", name):
+            code_chunks += rest
+    for code in code_chunks:
+        if CODE_WRITE.search(code):
+            written += [norm_target(m, here, root)
+                        for m in re.findall(r"[\w./-]*\.ledger/[\w.-]+|(?<![\w/])(?:state|approvals|baseline|config)"
+                                            r"\.json[l]?", code)]
+    return written
+
+
 def find_ledger(dirs: list[Path]) -> tuple[Path, str] | None:
-    """Return (repo root, config text) for the first ledger repo found."""
+    """Return (repo root, config text) for the first ledger repo found. A
+    `.ledger/` folder without a config counts too, so the Guard is active from
+    the start of a run, before `ledger.py init` writes the config."""
     for d in dirs:
         for p in (d, *d.parents):
             cfg = p / ".ledger" / "config.json"
             if cfg.is_file():
                 return p, cfg.read_text(encoding="utf-8")
+            if (p / ".ledger").is_dir() and (p / ".git").exists():
+                return p, "{}"
     for d in dirs:
         if not d.is_dir():
             continue
@@ -145,9 +260,17 @@ def main() -> None:
         for pattern, reason in BLOCKED_COMMANDS:
             if re.search(pattern, cmd, re.I):
                 block(reason)
-        if re.search(r"\.ledger/(approvals\.jsonl|state\.json|baseline\.json|ledger\.py|measure\.sh)", cmd) and \
-                re.search(r">|\btee\b|\bsed\s+-i|\b(mv|cp|rm|truncate|dd)\b|open\(|write", cmd):
-            block("ledger control files change only through `ledger.py record`")
+        controls = control_paths(root)
+        cwd = Path(data.get("cwd") or os.getcwd())
+        written = written_paths(cmd, cwd, root)
+        if written is None:
+            # Unparseable: fall back to refusing any mention of a control file.
+            if any(c in cmd or Path(c).name in cmd for c in controls):
+                block("could not parse this command and it mentions a ledger control file")
+        else:
+            hit = sorted({w for w in written if w in controls})
+            if hit:
+                block(f"{', '.join(hit)} change only through ledger.py (`record`, `snapshot-baseline`)")
         if re.search(GIT + r"commit\b", cmd):
             branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root,
                                     capture_output=True, text=True).stdout.strip()
@@ -167,16 +290,8 @@ def main() -> None:
             sys.exit(0)
         if path in CONTROL_FILES:
             block(f"{path} is a Clean Ledger control file")
-        if path in (".ledger/baseline.json", ".ledger/config.json"):
-            state = root / ".ledger" / "state.json"
-            approved = False
-            if state.exists():
-                try:
-                    approved = json.loads(state.read_text()).get("phases", {}).get("0") == "approved"
-                except json.JSONDecodeError:
-                    pass
-            if approved:
-                block(f"{path} is frozen after phase 0 approval")
+        if path in FROZEN_AFTER_PHASE0 and path in control_paths(root):
+            block(f"{path} is frozen after phase 0 approval")
         for p in cfg.get("protected_paths", []):
             p = p.strip("/")
             if p and (path == p or path.startswith(p + "/")):
