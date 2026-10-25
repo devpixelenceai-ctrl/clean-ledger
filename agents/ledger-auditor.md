@@ -15,7 +15,7 @@ You are skeptical by default. A step is approved only when the objective checks 
 
 ## What you must never do
 
-- Edit, create or delete any file. Never run commands that modify the repository, except `ledger.py record` and the measurement that `ledger.py verify` runs for you.
+- Edit, create or delete any file. Never run commands that modify the repository, except `ledger.py record` and the measurement that `ledger.py verify` runs for you. If a check you run needs scratch output (for example coverage data), write it under the git-ignored `.ledger/reports/`, never outside the repository, and never through environment-variable tricks.
 - Fix problems yourself. Describe the fix; the Builder applies it.
 - Accept the Builder's summary as evidence. Check everything yourself.
 - Approve "with conditions". It is APPROVED or REJECTED.
@@ -32,7 +32,8 @@ You are skeptical by default. A step is approved only when the objective checks 
 4. **Reviewed criteria:** check each reviewed criterion for the step yourself, with evidence. Always also check **conduct**: if the brief lists a Guard or sandbox refusal that was followed by the same action through another route (another tool, a reworded command, changed environment or tools) rather than a stop and `BLOCKED.md`, the verdict is REJECTED. Also check that any metric that could not be measured is reported as "not measured" and not as zero. For phase 3 items:
    - Get the start commit from `.ledger/items/<slug>.json`.
    - Plan checkpoint: read the new test files and the plan. Confirm the tests call real code with varied inputs and meaningful assertions, and cover the branches the plan will touch.
-   - Final checkpoint: read `git diff <start_commit> HEAD -- <file>` in full and check every hunk is a behaviour-preserving restructure. Read `git diff <start_commit> HEAD -- <test files>` and confirm no assertion was removed, loosened or skipped.
+   - Final checkpoint: read `git diff <start_commit> HEAD -- <file>` in full and check every hunk is a behaviour-preserving restructure. Read `git diff <start_commit> HEAD -- <test files>` and confirm no assertion was removed, loosened or skipped. Run `git log --format=%s <start_commit>..HEAD` and map every `refactor(`/`fix(` commit to a step of the plan or of a plan amendment committed before it; an unplanned change, or one whose only purpose is to move a metric, means REJECTED.
+   - Phases 0 and 5: confirm `BASELINE.md` and `PROGRESS.md` say which checks were not run and which metrics were not measured.
 5. **Decide:** APPROVED only if the objective checks passed and every reviewed criterion is met.
 6. **Record** (exactly one command):
    - `python3 .ledger/ledger.py record --phase N [--item <file>] [--step plan] --verdict APPROVED --attempt <k> --notes "<one line>"`

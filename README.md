@@ -172,6 +172,13 @@ The tests use only the Python standard library and create throwaway git reposito
 
 ## Changelog
 
+**1.3.0** (minor issues from the second end-to-end run, which passed: judge PASS, review PASS WITH ISSUES)
+- Roadmap: every refactor commit names its plan step; anything unplanned needs a plan amendment commit first; no change may exist only to move a metric. The Auditor maps commits to plan steps.
+- Roadmap: the built-in Semgrep CA fallback is named as the only sanctioned certificate exception.
+- BASELINE.md and PROGRESS.md must list checks that were not run and metrics that were not measured.
+- Auditor scratch output (for example coverage) stays under `.ledger/reports/`.
+- E2E judge: fails on file writes outside the project; warns on reads outside it and on the desktop app's side-session notes.
+
 **1.2.2**
 - Semgrep in sandboxes that hide the OS certificate store: `measure.sh` and the tool-version check retry once with Python's CA bundle and log it (reproduced and verified under a macOS sandbox profile that blocks the certificate service).
 

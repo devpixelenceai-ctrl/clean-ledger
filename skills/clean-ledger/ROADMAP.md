@@ -22,7 +22,7 @@ This file is the contract. The Builder follows it, and the Auditor judges the Bu
 3. **Small steps.** One module per item, one idea per commit, tests run after every commit.
 4. **Evidence over claims.** A phase is done when `ledger.py verify` passes and the Auditor approves. "I did it" is not evidence.
 5. **Nothing leaves the branch.** All work happens on the `clean-ledger` branch. Nothing is pushed, merged, published or deployed. The Owner merges.
-6. **When in doubt, stop.** Anything this roadmap does not cover, or anything the Guard or a sandbox refuses, is written up in `BLOCKED.md` and the run stops. Never route a refused action through another tool (for example a Write after a blocked shell command), never read `guard.py` or the sandbox settings to find a way around them, and never change certificates, caches, proxies or environment variables to get past a refusal. If you believe a block is a false positive, say so in `BLOCKED.md`; the Owner decides.
+6. **When in doubt, stop.** Anything this roadmap does not cover, or anything the Guard or a sandbox refuses, is written up in `BLOCKED.md` and the run stops. Never route a refused action through another tool (for example a Write after a blocked shell command), never read `guard.py` or the sandbox settings to find a way around them, and never change certificates, caches, proxies or environment variables to get past a refusal. If you believe a block is a false positive, say so in `BLOCKED.md`; the Owner decides. (The plugin's own `measure.sh` and `ledger.py` retry Semgrep once with Python's CA bundle when a sandbox hides the OS certificate store, and log it. That built-in fallback is the only sanctioned exception; the Builder never does this by hand.)
 7. **Measure honestly.** If an optional tool (such as Semgrep) cannot run, record that metric as "not measured" with the error, in `BASELINE.md` and the register, and continue. Never install, uninstall or reconfigure tools to make a measurement work, and never print or dump environment variables.
 
 ## 3. The protocol (run it for every step)
@@ -78,7 +78,7 @@ Run `python3 .ledger/ledger.py status` at any time to see where the run is. If a
 6. Run the test suite. If it does not pass, escalate. Clean Ledger never refactors on top of a failing suite.
 7. Explore the code read-only. Write `CLAUDE.md` with these headings: `## Overview`, `## Architecture`, `## Commands` (exact install, build, lint, test commands), `## Conventions`, `## Protected` (paths never to edit, matching `protected_paths`), `## Debt rules` (the golden rules in section 2).
 8. Run `bash .ledger/measure.sh`, then `python3 .ledger/ledger.py snapshot-baseline` (it copies `.ledger/metrics.json` to `.ledger/baseline.json`). If a tool failed, follow golden rule 7.
-9. Write `BASELINE.md`: date, commit, test results, coverage if available, the metrics, and outdated dependencies from the package manager.
+9. Write `BASELINE.md`: date, commit, test results, coverage if available, the metrics, outdated dependencies from the package manager, and a "Not checked" list naming any project check that was not run (for example lint or type checks) and any metric that was not measured.
 10. Commit: `chore(ledger): phase 0 setup`.
 
 **Objective criteria (verify --phase 0).** On the `clean-ledger` branch; config valid and source folders exist; base branch exists; `.ledger/ledger.py` and `measure.sh` present; lizard and jscpd installed; baseline valid; `CLAUDE.md` has Commands, Protected and Debt rules sections; `BASELINE.md` exists; `.gitignore` excludes `.ledger/reports/`; no source or test files changed; no protected paths changed; the test suite passes; the working tree is clean.
@@ -150,7 +150,7 @@ Work through `queue.json` in order, skipping items marked `done` or `skipped`. F
 
 **3e. Plan checkpoint.** Run the protocol with `--step plan`. Do not change the target file until the plan is approved.
 
-**3f. Refactor.** Carry out the approved plan one step at a time. After each step, run the tests and commit as `refactor(<module>): <step>` (or `fix(<module>): <security fix>`). If a step breaks tests and the fix is not obvious, revert that step with `git revert` and adjust the plan in a new commit.
+**3f. Refactor.** Carry out the approved plan one step at a time. After each step, run the tests and commit as `refactor(<module>): <step>` (or `fix(<module>): <security fix>`), naming the plan step in the commit message (for example `refactor(billing): step 2 - extract tax rules`). If a step breaks tests and the fix is not obvious, revert that step with `git revert` and adjust the plan in a new commit. Every change must belong to a plan step: to do anything the plan does not list, first add it to the plan in its own `docs(ledger): amend plan for <file>` commit, with its reason and risk. Never reshape code only to move a metric (for example to dodge clone detection); a small duplication shift caused by an extraction is fine while the gate passes.
 
 **3g. Record.** Add a row to `## Done` in `DEBT_REGISTER.md`: date, file, what changed, before → after numbers from `bash .ledger/measure.sh`. Commit: `docs(ledger): record fix for <file>`.
 
@@ -168,6 +168,7 @@ Work through `queue.json` in order, skipping items marked `done` or `skipped`. F
 - The plan is small-step, keeps public interfaces, and its risks are honest.
 
 **Reviewed criteria, final checkpoint.**
+- Every refactor/fix commit maps to a step in the approved plan, or to a plan amendment committed before it. No change exists only to move a metric.
 - Behaviour is preserved: read the full diff of the target (`git diff <start_commit> HEAD -- <file>`). Every logic change must be a pure restructuring. Any real behaviour change must be a documented security fix with a test.
 - Public signatures are unchanged unless the plan said otherwise and gave a reason.
 - No test was weakened: no assertions removed, loosened or skipped.
@@ -204,7 +205,7 @@ Work through `queue.json` in order, skipping items marked `done` or `skipped`. F
 
 **Tasks.**
 1. Run `bash .ledger/measure.sh` and update `## Totals` in the register.
-2. Write `PROGRESS.md` for non-technical readers, at most 300 words. Cover what was fixed; a before → after table of the totals; estimated monthly time and money saved (labelled as estimates, with assumptions); skipped items and why; and recommended next steps, including the remaining Tier 1 and Tier 2 work.
+2. Write `PROGRESS.md` for non-technical readers, at most 300 words. Cover what was fixed; a before → after table of the totals; estimated monthly time and money saved (labelled as estimates, with assumptions); skipped items and why; what was not checked (for example lint or type checks not run, metrics not measured); and recommended next steps, including the remaining Tier 1 and Tier 2 work.
 3. Write `PR_DESCRIPTION.md`: summary, list of changes per item, how behaviour was protected, test results, metrics before → after, risks, and a checklist for the Owner's review.
 4. If any item was skipped or any phase escalated, make sure `BLOCKED.md` is accurate.
 5. Commit: `docs(ledger): phase 5 report`.
